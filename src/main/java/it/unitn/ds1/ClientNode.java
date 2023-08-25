@@ -1,7 +1,6 @@
 package it.unitn.ds1;
 
 import akka.actor.*;
-
 import java.io.Serializable;
 import java.util.*;
 
@@ -13,6 +12,8 @@ public class ClientNode extends AbstractActor {
   /*-- Actor constructors --------------------------------------------------- */
   public ClientNode(int id) {
     this.id = id;
+    System.out.println("Client " + id + " joined with name: " + (this.getSelf()).path().name());
+
   }
 
   static public Props props(int id) {
@@ -23,6 +24,7 @@ public class ClientNode extends AbstractActor {
 
   public static class GetItemMessage implements Serializable {
     public final int key;
+
     public GetItemMessage(int key) {
       this.key = key;
     }
@@ -45,18 +47,20 @@ public class ClientNode extends AbstractActor {
   public void preStart() {
   }
 
+  // TODO: create message in function instead of get it as parameter
   public void getRequest(Serializable m, ActorRef receiver) {
     receiver.tell(m, getSelf());
-
   }
-
+  // TODO: create message in function instead of get it as parameter
+  public void updateRequest(Serializable m, ActorRef receiver) {
+    receiver.tell(m, getSelf());
+  }
   // Here we define the mapping between the received message types
   // and our actor methods
 
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-
         .build();
   }
 }
