@@ -31,11 +31,5 @@ public class Main {
     // system shutdown
     system.terminate();
   }
-
-  public static void inputContinue() {
-    try {
-      System.in.read();
-    }
-    catch (IOException ignored) {}
-  }
+  
 }
