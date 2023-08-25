@@ -1,4 +1,5 @@
 package it.unitn.ds1;
+
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import it.unitn.ds1.StorageNode.JoinGroupMsg;
@@ -19,8 +20,8 @@ public class Main {
 
     // Create the client nodes
     List<ActorRef> clientNodes = new ArrayList<>();
-    // clientNodes.add(system.actorOf(ClientNode.props(), "c1"));
-    // clientNodes.add(system.actorOf(ClientNode.props(), "c2"));
+    clientNodes.add(system.actorOf(ClientNode.props(1), "c1"));
+    clientNodes.add(system.actorOf(ClientNode.props(2), "c2"));
 
     // Create the storage nodes
     List<ActorRef> storageNodes = new ArrayList<>();
@@ -32,10 +33,10 @@ public class Main {
     // Send join messages to all the storage nodes to inform them about the
     // whole storage network nodes
     JoinGroupMsg start = new JoinGroupMsg(storageNodes);
-    for (ActorRef s: storageNodes) {
+    for (ActorRef s : storageNodes) {
       s.tell(start, ActorRef.noSender());
     }
-    
+
     // system shutdown
     system.terminate();
   }
