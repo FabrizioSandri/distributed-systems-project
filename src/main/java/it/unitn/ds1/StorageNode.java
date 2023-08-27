@@ -128,7 +128,7 @@ public class StorageNode extends AbstractActor {
     // As soon as R replies arrive, send the response to the client that
     // originated that request id
     if (readQuorum.get(requestId).size() >= R){
-      // TODO: send a GetResponse message and send the msot recent version
+      // TODO: send a GetResponse message and send the most recent version
       // requestSender.get(requestId).tell(TODO, getSelf());
     }
   }
@@ -160,22 +160,22 @@ public class StorageNode extends AbstractActor {
   /*-- Auxiliary functions -------------------------------------------------- */
 
   // Find the N nodes that has to be contacted for a given key
-  List<Integer> findNodesForKey(int key) {
+  List<Integer> findNodesForKey(int key){
 
     List<Integer> keySet = new ArrayList<>(storageNodes.keySet());
     List<Integer> nodesToBeContacted = new ArrayList<>();
     Collections.sort(keySet);
 
-    for (int i = 0, n = 0; i < storageNodes.size() && n < N; i++) {
-      if (keySet.get(i) >= key) {
+    for(int i=0, n=0; i<storageNodes.size() && n<N; i++){ 
+      if (keySet.get(i) >= key){
         nodesToBeContacted.add(keySet.get(i));
         n++;
       }
     }
 
     // take the remaining items from the beginning of the ring(modulo)
-    if (nodesToBeContacted.size() < N) {
-      for (int i = 0; i < N - nodesToBeContacted.size(); i++) {
+    if (nodesToBeContacted.size() < N){ 
+      for (int i=0; i<N-nodesToBeContacted.size(); i++){
         nodesToBeContacted.add(keySet.get(i));
       }
     }
