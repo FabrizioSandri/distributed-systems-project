@@ -59,11 +59,9 @@ public class ClientNode extends AbstractActor {
   public static class GetResponseMsg implements Serializable {
     // public final int requestId;
     public final Item item;
-    public final int key;
 
-    public GetResponseMsg(Item item, int key) {
+    public GetResponseMsg(Item item) {
       this.item = item;
-      this.key = key;
     }
   }
 
