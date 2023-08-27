@@ -72,15 +72,6 @@ public class StorageNode extends AbstractActor{
     }
   }
 
-  public static class WriteMsg implements Serializable { // From storage node to storage node
-    public final int key;
-    public final String value;
-    public WriteMsg(int key, String value) {
-      this.key = key;
-      this.value = value;
-    }
-  }
-
   public static class GetRequest implements Serializable {  // From client to storage node
     public final int key;
     public GetRequest(int key){
