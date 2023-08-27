@@ -105,9 +105,7 @@ public class StorageNode extends AbstractActor{
   /*-- Message handlers ----------------------------------------------------- */
   private void onJoinGroupMsg(JoinGroupMsg msg) {
     for (int storageNodeId: msg.storageNodes.keySet()) {
-      if (storageNodeId != this.id) { // copy all storage nodes except for self
-        this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
-      }
+      this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
     }
     System.out.println("[" + id + "] Joining the storage network");
   }
