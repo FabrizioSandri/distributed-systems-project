@@ -14,6 +14,7 @@ public class ClientNode extends AbstractActor {
   /*-- Actor constructors --------------------------------------------------- */
   public ClientNode(int id) {
     this.id = id;
+    storageNodes = new HashMap<>();
     System.out.println("[" + this.id + "] joining the client network");
   }
 
@@ -27,18 +28,17 @@ public class ClientNode extends AbstractActor {
   public static class UpdateRequestMsg implements Serializable {
     // public final int requestId;
     public final int key;
-    public final Item item;
+    public final String value;
 
-    public UpdateRequestMsg(int key, Item item) {
+    public UpdateRequestMsg(int key, String value) {
       this.key = key;
-      this.item = item;
+      this.value = value;
     }
   }
 
   public static class GetRequestMsg implements Serializable {
     // public final int requestId;
     public final int key;
-
     public GetRequestMsg(int key) {
       this.key = key;
     }
@@ -73,7 +73,6 @@ public class ClientNode extends AbstractActor {
       System.out.println(storageNodeId);
       this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
     }
-    System.out.println(storageNodes.toString());
   }
 
   public void getRequest(Integer storageNodeId, int key) {
@@ -82,11 +81,7 @@ public class ClientNode extends AbstractActor {
   }
 
   public void updateRequest(Integer storageNodeId, int key, String value) {
-    // version is set to 0 for initialize the item
-    // it will be then get and setted correctly by the
-    // storage node if version > 0 exists
-    Item item = new Item(value, 0);
-    UpdateRequestMsg m = new UpdateRequestMsg(key, item);
+    UpdateRequestMsg m = new UpdateRequestMsg(key, value);
     storageNodes.get(storageNodeId).tell(m, getSelf());
   }
 
