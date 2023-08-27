@@ -91,10 +91,8 @@ public class StorageNode extends AbstractActor {
 
   /*-- Message handlers ----------------------------------------------------- */
   private void onJoinGroupMsg(JoinGroupMsg msg) {
-    for (int storageNodeId : msg.storageNodes.keySet()) {
-      if (storageNodeId != this.id) { // copy all storage nodes except for self
-        this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
-      }
+    for (int storageNodeId: msg.storageNodes.keySet()) {
+      this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
     }
     System.out.println("[" + id + "] Joining the storage network");
   }
@@ -111,7 +109,7 @@ public class StorageNode extends AbstractActor {
 
     // Send the item as a response to the request
     ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId);
-    getSender().tell(res, getSender());
+    getSender().tell(res, getSelf());
 
   }
 
@@ -129,9 +127,9 @@ public class StorageNode extends AbstractActor {
 
     // As soon as R replies arrive, send the response to the client that
     // originated that request id
-    if (readQuorum.get(requestId).size() >= R) {
-      // TODO: send a GetResponse message
-      // requestSender.get(requestId).tell(TODO, getSender());
+    if (readQuorum.get(requestId).size() >= R){
+      // TODO: send a GetResponse message and send the msot recent version
+      // requestSender.get(requestId).tell(TODO, getSelf());
     }
   }
 
@@ -144,8 +142,8 @@ public class StorageNode extends AbstractActor {
 
     this.requestId++; // increase the request id for following requests
 
-    for (int storageNodeId : nodesToBeContacted) {
-      storageNodes.get(storageNodeId).tell(readMsg, getSender());
+    for (int storageNodeId : nodesToBeContacted){
+      storageNodes.get(storageNodeId).tell(readMsg, getSelf());
     }
 
   }
