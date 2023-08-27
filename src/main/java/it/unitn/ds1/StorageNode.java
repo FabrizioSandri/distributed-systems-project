@@ -1,5 +1,8 @@
 package it.unitn.ds1;
 
+import it.unitn.ds1.ClientNode.GetRequestMsg;
+import it.unitn.ds1.ClientNode.UpdateRequestMsg;
+
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
@@ -11,7 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class StorageNode extends AbstractActor{
+public class StorageNode extends AbstractActor {
 
   final static int N = 3;
   final static int R = 2;
@@ -29,14 +32,13 @@ public class StorageNode extends AbstractActor{
   // This variable holds thr count of incoming client requests. It serves the
   // purpose of distinguishing between different requests. Whenever a client
   // communicates with this storage node for a 'get' or 'update' request, the
-  // requestId value is incremented. 
+  // requestId value is incremented.
   // requestSender then maps request IDs to their originating clients.
   private int requestId;
-  private Map<Integer, ActorRef> requestSender; 
+  private Map<Integer, ActorRef> requestSender;
 
   private Map<Integer, List<Item>> readQuorum;
   private Map<Integer, List<Item>> writeQuorum;
-
 
   /*-- StorageNode constructors --------------------------------------------- */
   public StorageNode(int id) {
@@ -54,10 +56,10 @@ public class StorageNode extends AbstractActor{
     return Props.create(StorageNode.class, () -> new StorageNode(id));
   }
 
-
   /*-- Message classes ------------------------------------------------------ */
   public static class JoinGroupMsg implements Serializable {
     public final Map<Integer, ActorRef> storageNodes;
+
     public JoinGroupMsg(Map<Integer, ActorRef> storageNodes) {
       this.storageNodes = Collections.unmodifiableMap(new HashMap<Integer, ActorRef>(storageNodes));
     }
@@ -66,25 +68,10 @@ public class StorageNode extends AbstractActor{
   public static class ReadRequest implements Serializable { // From storage node to storage node
     public final int key;
     public final int requestId;
-    public ReadRequest(int key, int requestId){
+
+    public ReadRequest(int key, int requestId) {
       this.key = key;
       this.requestId = requestId;
-    }
-  }
-
-  public static class GetRequest implements Serializable {  // From client to storage node
-    public final int key;
-    public GetRequest(int key){
-      this.key = key;
-    }
-  }
-
-  public static class UpdateRequest implements Serializable { // From client to storage node
-    public final int key;
-    public final String value;
-    public UpdateRequest(int key, String value) {
-      this.key = key;
-      this.value = value;
     }
   }
 
@@ -93,7 +80,8 @@ public class StorageNode extends AbstractActor{
     public final String value;
     public final int version;
     public final int requestId;
-    public ReadResponse(int key, String value, int version, int requestId){
+
+    public ReadResponse(int key, String value, int version, int requestId) {
       this.key = key;
       this.value = value;
       this.version = version;
@@ -101,10 +89,9 @@ public class StorageNode extends AbstractActor{
     }
   }
 
-
   /*-- Message handlers ----------------------------------------------------- */
   private void onJoinGroupMsg(JoinGroupMsg msg) {
-    for (int storageNodeId: msg.storageNodes.keySet()) {
+    for (int storageNodeId : msg.storageNodes.keySet()) {
       if (storageNodeId != this.id) { // copy all storage nodes except for self
         this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
       }
@@ -117,7 +104,7 @@ public class StorageNode extends AbstractActor{
     String value = "";
 
     // Check if the storage contains the requested item
-    if (storage.containsKey(msg.key)){
+    if (storage.containsKey(msg.key)) {
       version = storage.get(msg.key).version;
       value = storage.get(msg.key).value;
     }
@@ -128,12 +115,12 @@ public class StorageNode extends AbstractActor{
 
   }
 
-  private void onReadResponse(ReadResponse msg){
+  private void onReadResponse(ReadResponse msg) {
 
     int requestId = msg.requestId;
 
     // if this is the first response create the list to hold the quorum
-    if (!readQuorum.containsKey(requestId)){  
+    if (!readQuorum.containsKey(requestId)) {
       readQuorum.put(requestId, new ArrayList<>());
     }
 
@@ -142,13 +129,13 @@ public class StorageNode extends AbstractActor{
 
     // As soon as R replies arrive, send the response to the client that
     // originated that request id
-    if (readQuorum.get(requestId).size() >= R){
+    if (readQuorum.get(requestId).size() >= R) {
       // TODO: send a GetResponse message
       // requestSender.get(requestId).tell(TODO, getSender());
     }
   }
 
-  private void onGetRequest(GetRequest msg){
+  private void onGetRequest(GetRequestMsg msg) {
 
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
@@ -157,41 +144,40 @@ public class StorageNode extends AbstractActor{
 
     this.requestId++; // increase the request id for following requests
 
-    for (int storageNodeId : nodesToBeContacted){
+    for (int storageNodeId : nodesToBeContacted) {
       storageNodes.get(storageNodeId).tell(readMsg, getSender());
     }
 
   }
-  
-  private void onUpdateRequest(UpdateRequest msg){
+
+  private void onUpdateRequest(UpdateRequestMsg msg) {
 
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
 
     // TODO: implement
 
-
   }
 
   /*-- Auxiliary functions -------------------------------------------------- */
 
   // Find the N nodes that has to be contacted for a given key
-  List<Integer> findNodesForKey(int key){
+  List<Integer> findNodesForKey(int key) {
 
     List<Integer> keySet = new ArrayList<>(storageNodes.keySet());
     List<Integer> nodesToBeContacted = new ArrayList<>();
     Collections.sort(keySet);
 
-    for(int i=0, n=0; i<storageNodes.size() && n<N; i++){ 
-      if (keySet.get(i) >= key){
+    for (int i = 0, n = 0; i < storageNodes.size() && n < N; i++) {
+      if (keySet.get(i) >= key) {
         nodesToBeContacted.add(keySet.get(i));
         n++;
       }
     }
 
     // take the remaining items from the beginning of the ring(modulo)
-    if (nodesToBeContacted.size() < N){ 
-      for (int i=0; i<N-nodesToBeContacted.size(); i++){
+    if (nodesToBeContacted.size() < N) {
+      for (int i = 0; i < N - nodesToBeContacted.size(); i++) {
         nodesToBeContacted.add(keySet.get(i));
       }
     }
@@ -199,17 +185,16 @@ public class StorageNode extends AbstractActor{
     return nodesToBeContacted;
   }
 
-
   // Mapping between the received message types and this actor methods
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-    .match(JoinGroupMsg.class,  this::onJoinGroupMsg)
-    .match(ReadRequest.class,  this::onReadRequest)
-    .match(UpdateRequest.class,  this::onUpdateRequest)
-    .match(GetRequest.class,  this::onGetRequest)
-    .match(ReadResponse.class,  this::onReadResponse)
-    .build();
+        .match(JoinGroupMsg.class, this::onJoinGroupMsg)
+        .match(ReadRequest.class, this::onReadRequest)
+        .match(UpdateRequestMsg.class, this::onUpdateRequest)
+        .match(GetRequestMsg.class, this::onGetRequest)
+        .match(ReadResponse.class, this::onReadResponse)
+        .build();
   }
-  
+
 }

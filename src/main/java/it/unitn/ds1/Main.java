@@ -20,12 +20,12 @@ public class Main {
     final ActorSystem system = ActorSystem.create("system");
 
     // Create the client nodes
-    List<ActorRef> clientNodes = new ArrayList<>();
-    clientNodes.add(system.actorOf(ClientNode.props(1), "c1"));
-    clientNodes.add(system.actorOf(ClientNode.props(2), "c2"));
+    Map<Integer, ActorRef> clientNodes = new HashMap<Integer, ActorRef>();
+    clientNodes.put(1, system.actorOf(ClientNode.props(1), "c1"));
+    clientNodes.put(2, system.actorOf(ClientNode.props(2), "c2"));
 
     // Create the storage nodes
-    Map<Integer,ActorRef> storageNodes = new HashMap<Integer, ActorRef>();
+    Map<Integer, ActorRef> storageNodes = new HashMap<Integer, ActorRef>();
     storageNodes.put(10, system.actorOf(StorageNode.props(10), "s10"));
     storageNodes.put(20, system.actorOf(StorageNode.props(20), "s20"));
     storageNodes.put(30, system.actorOf(StorageNode.props(30), "s30"));
@@ -36,6 +36,10 @@ public class Main {
     JoinGroupMsg start = new JoinGroupMsg(storageNodes);
     for (int storageNodeId : storageNodes.keySet()) {
       storageNodes.get(storageNodeId).tell(start, ActorRef.noSender());
+    }
+
+    for (int clientNodesId : clientNodes.keySet()) {
+      clientNodes.get(clientNodesId).tell(start, ActorRef.noSender());
     }
 
     // system shutdown
