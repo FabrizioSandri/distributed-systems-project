@@ -1,6 +1,7 @@
 package it.unitn.ds1;
 
 import it.unitn.ds1.ClientNode.GetRequestMsg;
+import it.unitn.ds1.ClientNode.GetResponseMsg;
 import it.unitn.ds1.ClientNode.UpdateRequestMsg;
 
 import akka.actor.AbstractActor;
@@ -122,14 +123,26 @@ public class StorageNode extends AbstractActor {
       readQuorum.put(requestId, new ArrayList<>());
     }
 
-    Item response = new Item(msg.value, msg.version);
-    readQuorum.get(requestId).add(response);
+    Item readRresponse = new Item(msg.value, msg.version);
+    readQuorum.get(requestId).add(readRresponse);
 
     // As soon as R replies arrive, send the response to the client that
     // originated that request id
     if (readQuorum.get(requestId).size() >= R){
-      // TODO: send a GetResponse message and send the most recent version
-      // requestSender.get(requestId).tell(TODO, getSelf());
+
+      Item mostRecentItem = readQuorum.get(requestId).get(0);
+      int mostRecentVersion = readQuorum.get(requestId).get(0).version;
+      
+      // find the item with the highest version
+      for (Item it : readQuorum.get(requestId)){
+        if (it.version > mostRecentVersion){
+          mostRecentItem = it;
+        }
+      }
+
+      // send back the response
+      GetResponseMsg getResponse = new GetResponseMsg(mostRecentItem);
+      requestSender.get(requestId).tell(getResponse, getSelf());
     }
   }
 
