@@ -5,8 +5,9 @@ import akka.actor.ActorSystem;
 import it.unitn.ds1.StorageNode.JoinGroupMsg;
 
 import java.util.List;
+import java.util.Map;
 import java.util.ArrayList;
-import java.io.IOException;
+import java.util.HashMap;
 
 public class Main {
 
@@ -24,17 +25,17 @@ public class Main {
     clientNodes.add(system.actorOf(ClientNode.props(2), "c2"));
 
     // Create the storage nodes
-    List<ActorRef> storageNodes = new ArrayList<>();
-    storageNodes.add(system.actorOf(StorageNode.props(10), "s10"));
-    storageNodes.add(system.actorOf(StorageNode.props(20), "s20"));
-    storageNodes.add(system.actorOf(StorageNode.props(30), "s30"));
-    storageNodes.add(system.actorOf(StorageNode.props(40), "s40"));
+    Map<Integer,ActorRef> storageNodes = new HashMap<Integer, ActorRef>();
+    storageNodes.put(10, system.actorOf(StorageNode.props(10), "s10"));
+    storageNodes.put(20, system.actorOf(StorageNode.props(20), "s20"));
+    storageNodes.put(30, system.actorOf(StorageNode.props(30), "s30"));
+    storageNodes.put(40, system.actorOf(StorageNode.props(40), "s40"));
 
     // Send join messages to all the storage nodes to inform them about the
     // whole storage network nodes
     JoinGroupMsg start = new JoinGroupMsg(storageNodes);
-    for (ActorRef s : storageNodes) {
-      s.tell(start, ActorRef.noSender());
+    for (int storageNodeId : storageNodes.keySet()) {
+      storageNodes.get(storageNodeId).tell(start, ActorRef.noSender());
     }
 
     // system shutdown
