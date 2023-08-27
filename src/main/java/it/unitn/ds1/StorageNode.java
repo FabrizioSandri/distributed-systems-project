@@ -14,20 +14,40 @@ import java.util.Map;
 public class StorageNode extends AbstractActor{
 
   final static int N = 3;
+  final static int R = 2;
 
-  private Map<Integer, String> storage;
-  private Map<Integer, Integer> storageVersions;
+  // The set of all the storage node composing the storage network. This map
+  // associates the node id to the corresponding ActorRef reference
   private Map<Integer, ActorRef> storageNodes;
 
-  private int id;
+  // This is the storage of each node in the storage network, associating keys
+  // to items(value and version)
+  private Map<Integer, Item> storage;
+
+  private int id; // the node id
+
+  // This variable holds thr count of incoming client requests. It serves the
+  // purpose of distinguishing between different requests. Whenever a client
+  // communicates with this storage node for a 'get' or 'update' request, the
+  // requestId value is incremented. 
+  // requestSender then maps request IDs to their originating clients.
+  private int requestId;
+  private Map<Integer, ActorRef> requestSender; 
+
+  private Map<Integer, List<Item>> readQuorum;
+  private Map<Integer, List<Item>> writeQuorum;
+
 
   /*-- StorageNode constructors --------------------------------------------- */
   public StorageNode(int id) {
     this.id = id;
+    this.requestId = 0;
 
-    storageNodes = new HashMap<Integer, ActorRef>();
-    storage = new HashMap<Integer, String>();
-    storageVersions = new HashMap<Integer, Integer>();
+    requestSender = new HashMap<>();
+    storageNodes = new HashMap<>();
+    storage = new HashMap<>();
+    readQuorum = new HashMap<>();
+    writeQuorum = new HashMap<>();
   }
 
   static public Props props(int id) {
@@ -43,10 +63,12 @@ public class StorageNode extends AbstractActor{
     }
   }
 
-  public static class ReadMsg implements Serializable { // From storage node to storage node
+  public static class ReadRequest implements Serializable { // From storage node to storage node
     public final int key;
-    public ReadMsg(int key){
+    public final int requestId;
+    public ReadRequest(int key, int requestId){
       this.key = key;
+      this.requestId = requestId;
     }
   }
 
@@ -59,17 +81,17 @@ public class StorageNode extends AbstractActor{
     }
   }
 
-  public static class GetMsg implements Serializable {  // From client to storage node
+  public static class GetRequest implements Serializable {  // From client to storage node
     public final int key;
-    public GetMsg(int key){
+    public GetRequest(int key){
       this.key = key;
     }
   }
 
-  public static class UpdateMsg implements Serializable { // From client to storage node
+  public static class UpdateRequest implements Serializable { // From client to storage node
     public final int key;
     public final String value;
-    public UpdateMsg(int key, String value) {
+    public UpdateRequest(int key, String value) {
       this.key = key;
       this.value = value;
     }
@@ -79,10 +101,12 @@ public class StorageNode extends AbstractActor{
     public final int key;
     public final String value;
     public final int version;
-    public ReadResponse(int key, String value, int version){
+    public final int requestId;
+    public ReadResponse(int key, String value, int version, int requestId){
       this.key = key;
       this.value = value;
       this.version = version;
+      this.requestId = requestId;
     }
   }
 
@@ -97,28 +121,50 @@ public class StorageNode extends AbstractActor{
     System.out.println("[" + id + "] Joining the storage network");
   }
 
-  private void onReadMsg(ReadMsg msg) {
+  private void onReadRequest(ReadRequest msg) {
     int version = -1;
     String value = "";
 
-    // Check if the storage contains the requested key
-    if (storageVersions.containsKey(msg.key) && storage.containsKey(msg.key)){
-      version = storageVersions.get(msg.key);
-      value = storage.get(msg.key);
+    // Check if the storage contains the requested item
+    if (storage.containsKey(msg.key)){
+      version = storage.get(msg.key).version;
+      value = storage.get(msg.key).value;
     }
 
     // Send the item as a response to the request
-    ReadResponse res = new ReadResponse(msg.key, value, version);
+    ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId);
     getSender().tell(res, getSender());
 
   }
 
+  private void onReadResponse(ReadResponse msg){
 
-  private void onGetMsg(GetMsg msg){
+    int requestId = msg.requestId;
+
+    // if this is the first response create the list to hold the quorum
+    if (!readQuorum.containsKey(requestId)){  
+      readQuorum.put(requestId, new ArrayList<>());
+    }
+
+    Item response = new Item(msg.value, msg.version);
+    readQuorum.get(requestId).add(response);
+
+    // As soon as R replies arrive, send the response to the client that
+    // originated that request id
+    if (readQuorum.get(requestId).size() >= R){
+      // TODO: send a GetResponse message
+      // requestSender.get(requestId).tell(TODO, getSender());
+    }
+  }
+
+  private void onGetRequest(GetRequest msg){
 
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
-    ReadMsg readMsg = new ReadMsg(msg.key);
+    ReadRequest readMsg = new ReadRequest(msg.key, this.requestId);
+    requestSender.put(this.requestId, getSender());
+
+    this.requestId++; // increase the request id for following requests
 
     for (int storageNodeId : nodesToBeContacted){
       storageNodes.get(storageNodeId).tell(readMsg, getSender());
@@ -126,7 +172,7 @@ public class StorageNode extends AbstractActor{
 
   }
   
-  private void onUpdateMsg(UpdateMsg msg){
+  private void onUpdateRequest(UpdateRequest msg){
 
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
@@ -168,9 +214,10 @@ public class StorageNode extends AbstractActor{
   public Receive createReceive() {
     return receiveBuilder()
     .match(JoinGroupMsg.class,  this::onJoinGroupMsg)
-    .match(ReadMsg.class,  this::onReadMsg)
-    .match(UpdateMsg.class,  this::onUpdateMsg)
-    .match(GetMsg.class,  this::onGetMsg)
+    .match(ReadRequest.class,  this::onReadRequest)
+    .match(UpdateRequest.class,  this::onUpdateRequest)
+    .match(GetRequest.class,  this::onGetRequest)
+    .match(ReadResponse.class,  this::onReadResponse)
     .build();
   }
   
