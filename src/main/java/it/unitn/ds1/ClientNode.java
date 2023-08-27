@@ -87,7 +87,7 @@ public class ClientNode extends AbstractActor {
     // td keep track of the request-respose id
     System.out
         .println(
-            "Get Response for key " + m.key + " with value " + m.item.value + " and with version v" + m.item.version);
+            "Get Response for key " + " with value " + m.item.value + " and with version v" + m.item.version);
   }
 
   private void onUpdateResponse(UpdateResponseMsg m) {
