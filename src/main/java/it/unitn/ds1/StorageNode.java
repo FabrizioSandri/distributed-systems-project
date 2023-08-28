@@ -19,7 +19,7 @@ public class StorageNode extends AbstractActor {
 
   final static int N = 3;
   final static int R = 2;
-
+  final static int W = 0;  
   // The set of all the storage node composing the storage network. This map
   // associates the node id to the corresponding ActorRef reference
   private Map<Integer, ActorRef> storageNodes;
@@ -38,8 +38,7 @@ public class StorageNode extends AbstractActor {
   private int requestId;
   private Map<Integer, ActorRef> requestSender;
 
-  private Map<Integer, List<Item>> readQuorum;
-  private Map<Integer, List<Item>> writeQuorum;
+  private Map<Integer, List<Item>> quorum;
 
   /*-- StorageNode constructors --------------------------------------------- */
   public StorageNode(int id) {
@@ -49,8 +48,7 @@ public class StorageNode extends AbstractActor {
     requestSender = new HashMap<>();
     storageNodes = new HashMap<>();
     storage = new HashMap<>();
-    readQuorum = new HashMap<>();
-    writeQuorum = new HashMap<>();
+    quorum = new HashMap<>();
   }
 
   static public Props props(int id) {
@@ -69,23 +67,35 @@ public class StorageNode extends AbstractActor {
   public static class ReadRequest implements Serializable { // From storage node to storage node
     public final int key;
     public final int requestId;
+    public final boolean readReq;
 
-    public ReadRequest(int key, int requestId) {
+    public ReadRequest(int key, int requestId, boolean readReq) {
       this.key = key;
       this.requestId = requestId;
+      this.readReq=readReq;
     }
   }
 
   public static class ReadResponse implements Serializable {
     public final int key;
-    public final String value;
-    public final int version;
+    public final Item item;
+    public final int requestId;
+    public final boolean readReq;
+    public ReadResponse(int key, String value, int version, int requestId, boolean readReq) {
+      this.key = key;
+      this.item = new Item(value, version);
+      this.requestId = requestId;
+      this.readReq = readReq;
+    }
+  }
+  public static class WriteMsg implements Serializable { // From storage node to storage node
+    public final int key;
+    public final Item item;
     public final int requestId;
 
-    public ReadResponse(int key, String value, int version, int requestId) {
+    public WriteMsg(int key, Item item, int requestId) {
       this.key = key;
-      this.value = value;
-      this.version = version;
+      this.item=item;
       this.requestId = requestId;
     }
   }
@@ -109,41 +119,55 @@ public class StorageNode extends AbstractActor {
     }
 
     // Send the item as a response to the request
-    ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId);
+    ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId, true);
     getSender().tell(res, getSelf());
 
   }
 
   private void onReadResponse(ReadResponse msg) {
+    int minQuorumNumber=R;
+    if (!msg.readReq){
+        minQuorumNumber=W;
+    }
 
     int requestId = msg.requestId;
 
     // if this is the first response create the list to hold the quorum
-    if (!readQuorum.containsKey(requestId)) {
-      readQuorum.put(requestId, new ArrayList<>());
+    if (!quorum.containsKey(requestId)) {
+      quorum.put(requestId, new ArrayList<>());
     }
 
-    Item readResponse = new Item(msg.value, msg.version);
-    readQuorum.get(requestId).add(readResponse);
+    Item readResponse = new Item(msg.item.value, msg.item.version);
+    quorum.get(requestId).add(readResponse);
 
     // As soon as R replies arrive, send the response to the client that
     // originated that request id. If size > R then discard the responses
     // because the response has already been sent
-    if (readQuorum.get(requestId).size() == R ){
+    if (quorum.get(requestId).size() == minQuorumNumber ){
 
-      Item mostRecentItem = readQuorum.get(requestId).get(0);
-      int mostRecentVersion = readQuorum.get(requestId).get(0).version;
+      Item mostRecentItem = quorum.get(requestId).get(0);
+      int mostRecentVersion = quorum.get(requestId).get(0).version;
       
       // find the item with the highest version
-      for (Item it : readQuorum.get(requestId)){
+      for (Item it : quorum.get(requestId)){
         if (it.version > mostRecentVersion){
           mostRecentItem = it;
         }
       }
 
       // send back the response
+      // TD change GetResponseMsg in ResponseMsg since a response to the client is the same for Get or Update
       GetResponseMsg getResponse = new GetResponseMsg(mostRecentItem);
       requestSender.get(requestId).tell(getResponse, getSelf());
+      
+      if (!msg.readReq){
+        List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
+        this.requestId++;
+        WriteMsg writeMSg = new WriteMsg (msg.key,mostRecentItem,requestId);
+        for (int storageNodeId : nodesToBeContacted){
+          storageNodes.get(storageNodeId).tell(writeMSg, getSelf());
+        }
+      }
     }
   }
 
@@ -151,7 +175,7 @@ public class StorageNode extends AbstractActor {
 
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
-    ReadRequest readMsg = new ReadRequest(msg.key, this.requestId);
+    ReadRequest readMsg = new ReadRequest(msg.key, this.requestId, true);
     requestSender.put(this.requestId, getSender());
 
     this.requestId++; // increase the request id for following requests
@@ -167,8 +191,20 @@ public class StorageNode extends AbstractActor {
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
 
-    // TODO: implement
+    ReadRequest readMsg = new ReadRequest(msg.key, this.requestId, false);
+    requestSender.put(this.requestId, getSender());
 
+    this.requestId++; // increase the request id for following requests
+
+    for (int storageNodeId : nodesToBeContacted){
+      storageNodes.get(storageNodeId).tell(readMsg, getSelf());
+    }
+  }
+
+  private void onWriteMsg(WriteMsg msg){
+    
+    storage.put(msg.key, msg.item);
+    //TD unlock the item
   }
 
   /*-- Auxiliary functions -------------------------------------------------- */
@@ -212,6 +248,7 @@ public class StorageNode extends AbstractActor {
         .match(UpdateRequestMsg.class, this::onUpdateRequest)
         .match(GetRequestMsg.class, this::onGetRequest)
         .match(ReadResponse.class, this::onReadResponse)
+        .match(WriteMsg.class, this::onWriteMsg)
         .build();
   }
 
