@@ -129,7 +129,7 @@ public class StorageNode extends AbstractActor {
   }
 
   private void onReadRequest(ReadRequest msg) {
-    int version = -1;
+    int version = 0;
     String value = "";
 
     // Check if the storage contains the requested item
@@ -177,6 +177,7 @@ public class StorageNode extends AbstractActor {
       for (Item it : quorum.get(requestId)){
         if (it.version > mostRecentVersion){
           mostRecentItem = it;
+          mostRecentVersion = it.version;
         }
       }
 
@@ -187,13 +188,15 @@ public class StorageNode extends AbstractActor {
       
       if (msg.reqType == RequestType.WRITE){  // if the case of a write
         List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
-        this.requestId++;
+        mostRecentItem.version++;
         WriteMsg writeMSg = new WriteMsg(msg.key, mostRecentItem);
         for (int storageNodeId : nodesToBeContacted){
           storageNodes.get(storageNodeId).tell(writeMSg, getSelf());
         }
       }
     }
+    // TODO: for efficiency reasons in this part it's possible to check if
+    // quorum.get(requestId).size() == N and then remove the key from quorum
   }
 
   private void onGetRequest(GetRequestMsg msg) {
