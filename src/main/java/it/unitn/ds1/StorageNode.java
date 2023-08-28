@@ -223,8 +223,6 @@ public class StorageNode extends AbstractActor {
       getSender().tell(res, getSelf());
     }
 
-
-
   }
 
   private void onReadResponse(ReadResponse msg) {
@@ -329,7 +327,7 @@ public class StorageNode extends AbstractActor {
 
     // send an error message to the client that originated the request. Check
     // again that the quorum in the meanwhile has not been reached
-    if (quorum.get(msg.requestId).size() < msg.minQuorumSize){  
+    if (!quorum.containsKey(msg.requestId) || quorum.get(msg.requestId).size() < msg.minQuorumSize){  
       ErrorMsg error = new ErrorMsg("The request with id " + requestId + " timed out.");
       requestSender.get(msg.requestId).tell(error, getSender());
     }
