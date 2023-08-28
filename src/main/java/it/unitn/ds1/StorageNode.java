@@ -4,6 +4,8 @@ import it.unitn.ds1.ClientNode.ErrorMsg;
 import it.unitn.ds1.ClientNode.GetRequestMsg;
 import it.unitn.ds1.ClientNode.GetResponseMsg;
 import it.unitn.ds1.ClientNode.UpdateRequestMsg;
+import it.unitn.ds1.ClientNode.UpdateResponseMsg;
+
 import scala.concurrent.duration.Duration;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
@@ -106,13 +108,26 @@ public class StorageNode extends AbstractActor {
     }
   }
 
-  public static class WriteMsg implements Serializable { // From storage node to storage node
+  // Request write for an item sent from a storage node to storage node
+  public static class WriteRequestMsg implements Serializable {
     public final int key;
-    public final Item item;
+    public final int requestId;
 
-    public WriteMsg(int key, Item item) {
+    public WriteRequestMsg(int key, int requestId) {
       this.key = key;
-      this.item=item;
+      this.requestId = requestId;
+    }
+  }
+
+  public static class WriteResponseMsg implements Serializable {
+    public final int version;
+    public final int key;
+    public final int requestId;
+  
+    public WriteResponseMsg(int version, int key, int requestId) {
+      this.version = version;
+      this.key = key;
+      this.requestId = requestId;
     }
   }
 
@@ -134,6 +149,65 @@ public class StorageNode extends AbstractActor {
     }
     log("Joined the storage network");
   }
+  
+  private void onWriteRequest(WriteRequestMsg msg) {
+    int version = 0;
+
+    // Check if the storage contains the requested item
+    if (storage.containsKey(msg.key)) {
+      version = storage.get(msg.key).version;
+    }
+
+    // Send the item as a response to the request
+    WriteResponseMsg res = new WriteResponseMsg(version, msg.key, msg.requestId);
+    getSender().tell(res, getSelf());
+
+  }
+
+  private void onWriteResponse(WriteResponseMsg msg) {
+    int requestId = msg.requestId;
+
+    // if this is the first response create the list to hold the quorum
+    if (!quorum.containsKey(requestId)) {
+      quorum.put(requestId, new ArrayList<>());
+    }
+
+    Item readResponse = new Item(null, msg.version);
+    quorum.get(requestId).add(readResponse);
+
+    // As soon as W replies arrive, send the response to the client that
+    // originated that request id. If size > W then discard the responses
+    // because the response has already been sent
+    if (quorum.get(requestId).size() == W && fulfilled.containsKey(requestId) == false){
+      
+      // The request has been fulfilled and thus 
+      fulfilled.put(requestId, true); 
+      
+      int mostRecentVersion = quorum.get(requestId).get(0).version;
+      
+      // find the item with the highest version
+      for (Item it : quorum.get(requestId)){
+        if (it.version > mostRecentVersion){
+          mostRecentVersion = it.version;
+        }
+      }
+
+      // send back the response        
+      List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
+
+      // create updated item and send it to the client and the other nodes
+      Item newItem =  new Item(toWrite.get(requestId), mostRecentVersion+1);
+      UpdateResponseMsg updateResponse = new UpdateResponseMsg(msg.key, newItem);
+      requestSender.get(requestId).tell(updateResponse, getSelf());
+
+      for (int storageNodeId : nodesToBeContacted){
+        storageNodes.get(storageNodeId).tell(updateResponse, getSelf());
+      }
+    }
+    // TODO: for efficiency reasons in this part it's possible to check if
+    // quorum.get(requestId).size() == N and then remove the key from quorum
+  }
+
 
   private void onReadRequest(ReadRequest msg) {
     int version = 0;
@@ -148,16 +222,9 @@ public class StorageNode extends AbstractActor {
     // Send the item as a response to the request
     ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId, msg.reqType);
     getSender().tell(res, getSelf());
-
   }
 
   private void onReadResponse(ReadResponse msg) {
-    int minQuorumNumber;
-    if (msg.reqType == RequestType.WRITE){
-      minQuorumNumber=W;
-    }else {
-      minQuorumNumber = R;
-    }
 
     int requestId = msg.requestId;
 
@@ -172,7 +239,7 @@ public class StorageNode extends AbstractActor {
     // As soon as R replies arrive, send the response to the client that
     // originated that request id. If size > R then discard the responses
     // because the response has already been sent
-    if (quorum.get(requestId).size() == minQuorumNumber && fulfilled.containsKey(requestId) == false){
+    if (quorum.get(requestId).size() == R && fulfilled.containsKey(requestId) == false){
       
       // The request has been fulfilled and thus 
       fulfilled.put(requestId, true); 
@@ -189,17 +256,8 @@ public class StorageNode extends AbstractActor {
       }
 
       // send back the response
-      // TD change GetResponseMsg in ResponseMsg since a response to the client is the same for Get or Update
       GetResponseMsg getResponse = new GetResponseMsg(mostRecentItem);
       requestSender.get(requestId).tell(getResponse, getSelf());
-      
-      if (msg.reqType == RequestType.WRITE){  // if the case of a write
-        List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
-        WriteMsg writeMSg = new WriteMsg(msg.key, new Item(toWrite.get(requestId), mostRecentVersion+1));
-        for (int storageNodeId : nodesToBeContacted){
-          storageNodes.get(storageNodeId).tell(writeMSg, getSelf());
-        }
-      }
     }
     // TODO: for efficiency reasons in this part it's possible to check if
     // quorum.get(requestId).size() == N and then remove the key from quorum
@@ -247,7 +305,7 @@ public class StorageNode extends AbstractActor {
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
     
-    ReadRequest readMsg = new ReadRequest(msg.key, this.requestId, RequestType.WRITE);
+    WriteRequestMsg readMsg = new WriteRequestMsg(msg.key, this.requestId);
     requestSender.put(this.requestId, getSender());
 
     this.requestId++; // increase the request id for following requests
@@ -257,7 +315,7 @@ public class StorageNode extends AbstractActor {
     }
   }
 
-  private void onWriteMsg(WriteMsg msg){
+  private void onUpdateResponse(UpdateResponseMsg msg){
     storage.put(msg.key, msg.item);
     //TD unlock the item
   }
@@ -315,7 +373,9 @@ public class StorageNode extends AbstractActor {
         .match(UpdateRequestMsg.class, this::onUpdateRequest)
         .match(GetRequestMsg.class, this::onGetRequest)
         .match(ReadResponse.class, this::onReadResponse)
-        .match(WriteMsg.class, this::onWriteMsg)
+        .match(WriteRequestMsg.class,this::onWriteRequest)
+        .match(WriteResponseMsg.class, this::onWriteResponse)
+        .match(UpdateResponseMsg.class, this::onUpdateResponse)
         .match(TimeoutMsg.class, this::onTimeout)
         .build();
   }
