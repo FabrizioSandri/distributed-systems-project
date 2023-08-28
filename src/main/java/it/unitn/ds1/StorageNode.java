@@ -47,16 +47,22 @@ public class StorageNode extends AbstractActor {
 
   private Map<Integer, List<Item>> quorum;
 
+  // Used by the coordinator to retrieve the value to be written in a write
+  // request given the request id  
+  private Map<Integer, String> toWrite;
+
+
   /*-- StorageNode constructors --------------------------------------------- */
   public StorageNode(int id) {
     this.id = id;
     this.requestId = 0;
-
+    
     requestSender = new HashMap<>();
     storageNodes = new HashMap<>();
     storage = new HashMap<>();
     quorum = new HashMap<>();
     fulfilled = new HashMap<>();
+    toWrite = new HashMap<>();
   }
 
   static public Props props(int id) {
@@ -99,6 +105,7 @@ public class StorageNode extends AbstractActor {
       this.reqType = reqType;
     }
   }
+
   public static class WriteMsg implements Serializable { // From storage node to storage node
     public final int key;
     public final Item item;
@@ -188,8 +195,7 @@ public class StorageNode extends AbstractActor {
       
       if (msg.reqType == RequestType.WRITE){  // if the case of a write
         List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
-        mostRecentItem.version++;
-        WriteMsg writeMSg = new WriteMsg(msg.key, mostRecentItem);
+        WriteMsg writeMSg = new WriteMsg(msg.key, new Item(toWrite.get(requestId), mostRecentVersion+1));
         for (int storageNodeId : nodesToBeContacted){
           storageNodes.get(storageNodeId).tell(writeMSg, getSelf());
         }
@@ -234,9 +240,12 @@ public class StorageNode extends AbstractActor {
       getSelf()                                             // source of the message (myself)
     );
 
+    // TODO
+    toWrite.put(requestId, msg.value);
+
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
-
+    
     ReadRequest readMsg = new ReadRequest(msg.key, this.requestId, RequestType.WRITE);
     requestSender.put(this.requestId, getSender());
 
@@ -248,11 +257,9 @@ public class StorageNode extends AbstractActor {
   }
 
   private void onWriteMsg(WriteMsg msg){
-    
     storage.put(msg.key, msg.item);
     //TD unlock the item
   }
-
 
   private void onTimeout(TimeoutMsg msg) {    
     fulfilled.put(msg.requestId, true);
