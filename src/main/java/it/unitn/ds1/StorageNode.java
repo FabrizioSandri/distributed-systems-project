@@ -240,7 +240,8 @@ public class StorageNode extends AbstractActor {
       getSelf()                                             // source of the message (myself)
     );
 
-    // TODO
+    // Save the item to be written for this request id. Used then by this node
+    // once the write quorum has been reached
     toWrite.put(requestId, msg.value);
 
     // Contact the N nodes
