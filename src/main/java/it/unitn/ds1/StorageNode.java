@@ -139,7 +139,7 @@ public class StorageNode extends AbstractActor {
     }
 
     // Send the item as a response to the request
-    ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId, true);
+    ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId, msg.reqType);
     getSender().tell(res, getSelf());
 
   }
