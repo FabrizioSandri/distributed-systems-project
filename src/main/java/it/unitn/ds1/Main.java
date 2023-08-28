@@ -87,7 +87,7 @@ public class Main {
           System.out.println("C" + clientnodeId + " doesn't exists in the set of client nodes");
         }
 
-      }else if (command.equals("q")){
+      }else if (command.equals("q")){ // quit the application
         System.out.println("Exiting");
       }else {
         System.out.println("Command not recognized as a valid one.");
