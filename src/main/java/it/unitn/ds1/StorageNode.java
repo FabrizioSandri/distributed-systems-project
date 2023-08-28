@@ -95,7 +95,7 @@ public class StorageNode extends AbstractActor {
     for (int storageNodeId: msg.storageNodes.keySet()) {
       this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
     }
-    System.out.println("[" + id + "] Joining the storage network");
+    log("Joined the storage network");
   }
 
   private void onReadRequest(ReadRequest msg) {
@@ -123,12 +123,13 @@ public class StorageNode extends AbstractActor {
       readQuorum.put(requestId, new ArrayList<>());
     }
 
-    Item readRresponse = new Item(msg.value, msg.version);
-    readQuorum.get(requestId).add(readRresponse);
+    Item readResponse = new Item(msg.value, msg.version);
+    readQuorum.get(requestId).add(readResponse);
 
     // As soon as R replies arrive, send the response to the client that
-    // originated that request id
-    if (readQuorum.get(requestId).size() >= R){
+    // originated that request id. If size > R then discard the responses
+    // because the response has already been sent
+    if (readQuorum.get(requestId).size() == R ){
 
       Item mostRecentItem = readQuorum.get(requestId).get(0);
       int mostRecentVersion = readQuorum.get(requestId).get(0).version;
@@ -179,7 +180,8 @@ public class StorageNode extends AbstractActor {
     List<Integer> nodesToBeContacted = new ArrayList<>();
     Collections.sort(keySet);
 
-    for(int i=0, n=0; i<storageNodes.size() && n<N; i++){ 
+    int n=0;
+    for(int i=0; i<storageNodes.size() && n<N; i++){ 
       if (keySet.get(i) >= key){
         nodesToBeContacted.add(keySet.get(i));
         n++;
@@ -188,12 +190,17 @@ public class StorageNode extends AbstractActor {
 
     // take the remaining items from the beginning of the ring(modulo)
     if (nodesToBeContacted.size() < N){ 
-      for (int i=0; i<N-nodesToBeContacted.size(); i++){
+      for (int i=0; i<N-n; i++){
         nodesToBeContacted.add(keySet.get(i));
       }
     }
 
     return nodesToBeContacted;
+  }
+
+  // log a given message while also printing the storage node id
+  void log(String message){
+    System.out.println("[S" + id + "] " + message);
   }
 
   // Mapping between the received message types and this actor methods
