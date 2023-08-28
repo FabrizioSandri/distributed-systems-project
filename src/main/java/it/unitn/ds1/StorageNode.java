@@ -43,6 +43,7 @@ public class StorageNode extends AbstractActor {
   // requestSender then maps request IDs to their originating clients.
   private int requestId;
   private Map<Integer, ActorRef> requestSender;
+  private Map<Integer, Boolean> fulfilled;
 
   private Map<Integer, List<Item>> quorum;
 
@@ -55,6 +56,7 @@ public class StorageNode extends AbstractActor {
     storageNodes = new HashMap<>();
     storage = new HashMap<>();
     quorum = new HashMap<>();
+    fulfilled = new HashMap<>();
   }
 
   static public Props props(int id) {
@@ -88,12 +90,13 @@ public class StorageNode extends AbstractActor {
     public final int key;
     public final Item item;
     public final int requestId;
-    public final boolean readReq;
-    public ReadResponse(int key, String value, int version, int requestId, boolean readReq) {
+    public final RequestType reqType;
+
+    public ReadResponse(int key, String value, int version, int requestId, RequestType reqType) {
       this.key = key;
       this.item = new Item(value, version);
       this.requestId = requestId;
-      this.readReq = readReq;
+      this.reqType = reqType;
     }
   }
   public static class WriteMsg implements Serializable { // From storage node to storage node
@@ -142,9 +145,11 @@ public class StorageNode extends AbstractActor {
   }
 
   private void onReadResponse(ReadResponse msg) {
-    int minQuorumNumber=R;
-    if (!msg.readReq){
-        minQuorumNumber=W;
+    int minQuorumNumber;
+    if (msg.reqType == RequestType.WRITE){
+      minQuorumNumber=W;
+    }else {
+      minQuorumNumber = R;
     }
 
     int requestId = msg.requestId;
@@ -160,8 +165,11 @@ public class StorageNode extends AbstractActor {
     // As soon as R replies arrive, send the response to the client that
     // originated that request id. If size > R then discard the responses
     // because the response has already been sent
-    if (quorum.get(requestId).size() == minQuorumNumber ){
-
+    if (quorum.get(requestId).size() == minQuorumNumber && fulfilled.containsKey(requestId) == false){
+      
+      // The request has been fulfilled and thus 
+      fulfilled.put(requestId, true); 
+      
       Item mostRecentItem = quorum.get(requestId).get(0);
       int mostRecentVersion = quorum.get(requestId).get(0).version;
       
@@ -177,7 +185,7 @@ public class StorageNode extends AbstractActor {
       GetResponseMsg getResponse = new GetResponseMsg(mostRecentItem);
       requestSender.get(requestId).tell(getResponse, getSelf());
       
-      if (!msg.readReq){  // if the case of a write
+      if (msg.reqType == RequestType.WRITE){  // if the case of a write
         List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
         this.requestId++;
         WriteMsg writeMSg = new WriteMsg(msg.key, mostRecentItem);
@@ -243,13 +251,16 @@ public class StorageNode extends AbstractActor {
   }
 
 
-  private void onTimeout(TimeoutMsg msg) {
-    if (quorum.get(msg.requestId).size() < msg.minQuorumSize){  // send an error message to the client that originated the request
+  private void onTimeout(TimeoutMsg msg) {    
+    fulfilled.put(msg.requestId, true);
+
+    // send an error message to the client that originated the request. Check
+    // again that the quorum in the meanwhile has not been reached
+    if (quorum.get(msg.requestId).size() < msg.minQuorumSize){  
       ErrorMsg error = new ErrorMsg("The request with id " + requestId + " timed out.");
       requestSender.get(msg.requestId).tell(error, getSender());
-    }else{
-      // TODO: it's possible that in the meanwhile all the messages arrived
     }
+
   }
 
   /*-- Auxiliary functions -------------------------------------------------- */
