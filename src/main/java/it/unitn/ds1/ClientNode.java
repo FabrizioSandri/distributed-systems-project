@@ -69,6 +69,14 @@ public class ClientNode extends AbstractActor {
     }
   }
 
+  public static class ErrorMsg implements Serializable {
+    public final String errormsg;
+
+    public ErrorMsg(String errormsg) {
+      this.errormsg = errormsg;
+    }
+  }
+
   /*-- Actor logic ---------------------------------------------------------- */
   private void onJoinGroupMsg(JoinGroupMsg msg) {
     for (int storageNodeId : msg.storageNodes.keySet()) {
@@ -102,6 +110,11 @@ public class ClientNode extends AbstractActor {
                 + m.item.version);
   }
 
+  // Handle error messages
+  private void onErrorMsg(ErrorMsg msg) {  
+    log(msg.errormsg);
+  }
+
   /*-- Auxiliary functions -------------------------------------------------- */
 
   // log a given message while also printing the storage node id
@@ -118,7 +131,7 @@ public class ClientNode extends AbstractActor {
         .match(GetResponseMsg.class, this::onGetResponse)
         .match(UpdateRequestMsg.class, this::onUpdateRequest)
         .match(UpdateResponseMsg.class, this::onUpdateResponse)
-
+        .match(ErrorMsg.class, this::onErrorMsg)
         .build();
   }
 }

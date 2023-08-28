@@ -1,9 +1,10 @@
 package it.unitn.ds1;
 
+import it.unitn.ds1.ClientNode.ErrorMsg;
 import it.unitn.ds1.ClientNode.GetRequestMsg;
 import it.unitn.ds1.ClientNode.GetResponseMsg;
 import it.unitn.ds1.ClientNode.UpdateRequestMsg;
-
+import scala.concurrent.duration.Duration;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
@@ -14,12 +15,15 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class StorageNode extends AbstractActor {
 
   final static int N = 3;
   final static int R = 2;
-  final static int W = 0;  
+  final static int W = 2;
+  final static int T = 2;
+
   // The set of all the storage node composing the storage network. This map
   // associates the node id to the corresponding ActorRef reference
   private Map<Integer, ActorRef> storageNodes;
@@ -64,7 +68,8 @@ public class StorageNode extends AbstractActor {
     }
   }
 
-  public static class ReadRequest implements Serializable { // From storage node to storage node
+  // Request for an item sent from a storage node to storage node
+  public static class ReadRequest implements Serializable {
     public final int key;
     public final int requestId;
     public final boolean readReq;
@@ -76,6 +81,7 @@ public class StorageNode extends AbstractActor {
     }
   }
 
+  // Response for an item sent from a storage node to storage node that asked it
   public static class ReadResponse implements Serializable {
     public final int key;
     public final Item item;
@@ -97,6 +103,17 @@ public class StorageNode extends AbstractActor {
       this.key = key;
       this.item=item;
       this.requestId = requestId;
+    }
+  }
+
+  // Used to specify that a given request id has timed out
+  public static class TimeoutMsg implements Serializable {
+    public final int requestId;
+    public final int minQuorumSize;
+
+    public TimeoutMsg(int requestId, int minQuorumSize) {
+      this.requestId = requestId;      
+      this.minQuorumSize = minQuorumSize;      
     }
   }
 
@@ -173,6 +190,15 @@ public class StorageNode extends AbstractActor {
 
   private void onGetRequest(GetRequestMsg msg) {
 
+    // schedule the timeout after T seconds
+    getContext().system().scheduler().scheduleOnce(
+      Duration.create(T * 1000, TimeUnit.MILLISECONDS),     // how frequently generate them
+      getSelf(),                                            // destination actor reference
+      new TimeoutMsg(this.requestId, R),                    // the message to send
+      getContext().system().dispatcher(),                   // system dispatcher
+      getSelf()                                             // source of the message (myself)
+    );
+
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
     ReadRequest readMsg = new ReadRequest(msg.key, this.requestId, true);
@@ -187,6 +213,15 @@ public class StorageNode extends AbstractActor {
   }
 
   private void onUpdateRequest(UpdateRequestMsg msg) {
+
+    // schedule the timeout after T seconds
+    getContext().system().scheduler().scheduleOnce(
+      Duration.create(T * 1000, TimeUnit.MILLISECONDS),     // how frequently generate them
+      getSelf(),                                            // destination actor reference
+      new TimeoutMsg(this.requestId, W),                    // the message to send
+      getContext().system().dispatcher(),                   // system dispatcher
+      getSelf()                                             // source of the message (myself)
+    );
 
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
@@ -205,6 +240,16 @@ public class StorageNode extends AbstractActor {
     
     storage.put(msg.key, msg.item);
     //TD unlock the item
+  }
+
+
+  private void onTimeout(TimeoutMsg msg) {
+    if (quorum.get(msg.requestId).size() < msg.minQuorumSize){  // send an error message to the client that originated the request
+      ErrorMsg error = new ErrorMsg("The request with id " + requestId + " timed out.");
+      requestSender.get(msg.requestId).tell(error, getSender());
+    }else{
+      // TODO: it's possible that in the meanwhile all the messages arrived
+    }
   }
 
   /*-- Auxiliary functions -------------------------------------------------- */
@@ -249,6 +294,7 @@ public class StorageNode extends AbstractActor {
         .match(GetRequestMsg.class, this::onGetRequest)
         .match(ReadResponse.class, this::onReadResponse)
         .match(WriteMsg.class, this::onWriteMsg)
+        .match(TimeoutMsg.class, this::onTimeout)
         .build();
   }
 
