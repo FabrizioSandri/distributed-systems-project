@@ -217,11 +217,14 @@ public class StorageNode extends AbstractActor {
     if (storage.containsKey(msg.key)) {
       version = storage.get(msg.key).version;
       value = storage.get(msg.key).value;
+
+      // Send the item as a response to the request
+      ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId, msg.reqType);
+      getSender().tell(res, getSelf());
     }
 
-    // Send the item as a response to the request
-    ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId, msg.reqType);
-    getSender().tell(res, getSelf());
+
+
   }
 
   private void onReadResponse(ReadResponse msg) {
@@ -317,6 +320,7 @@ public class StorageNode extends AbstractActor {
 
   private void onUpdateResponse(UpdateResponseMsg msg){
     storage.put(msg.key, msg.item);
+    log("The item with key " + msg.key + " has been updated to '" + msg.item.value + "' (v" + msg.item.version + ")");
     //TD unlock the item
   }
 

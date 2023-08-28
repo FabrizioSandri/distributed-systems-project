@@ -94,15 +94,11 @@ public class ClientNode extends AbstractActor {
     storageNodes.get(msg.storageNodeId).tell(msg, getSelf());
   }
 
-  private void onGetResponse(GetResponseMsg m) {
-    // td keep track of the request-respose id
-    System.out
-        .println(
-            "Get Response for key " + " with value " + m.item.value + " and with version v" + m.item.version);
+  private void onGetResponse(GetResponseMsg msg) {
+    log("Get response: '" + msg.item.value + "' (v" + msg.item.version + ")");
   }
 
   private void onUpdateResponse(UpdateResponseMsg m) {
-    // td keep track of the request-respose id
     System.out
         .println(
             "Get Response from storage node: " + getSender().path().name() + "for key " + m.key + " with value "
