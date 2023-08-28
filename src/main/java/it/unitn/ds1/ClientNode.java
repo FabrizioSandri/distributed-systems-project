@@ -8,14 +8,14 @@ import it.unitn.ds1.StorageNode.JoinGroupMsg;;
 public class ClientNode extends AbstractActor {
 
   // Client Node variables
-  int id;
+  private int id;
   private Map<Integer, ActorRef> storageNodes;
 
   /*-- Actor constructors --------------------------------------------------- */
   public ClientNode(int id) {
     this.id = id;
     storageNodes = new HashMap<>();
-    System.out.println("[" + this.id + "] joining the client network");
+    log("Joined the network");
   }
 
   static public Props props(int id) {
@@ -29,18 +29,22 @@ public class ClientNode extends AbstractActor {
     // public final int requestId;
     public final int key;
     public final String value;
+    public final int storageNodeId;
 
-    public UpdateRequestMsg(int key, String value) {
+    public UpdateRequestMsg(int key, String value, int storageNodeId) {
       this.key = key;
       this.value = value;
+      this.storageNodeId = storageNodeId;
     }
   }
 
   public static class GetRequestMsg implements Serializable {
     // public final int requestId;
     public final int key;
-    public GetRequestMsg(int key) {
+    public final int storageNodeId;
+    public GetRequestMsg(int key, int storageNodeId) {
       this.key = key;
+      this.storageNodeId = storageNodeId;
     }
   }
 
@@ -68,19 +72,18 @@ public class ClientNode extends AbstractActor {
   /*-- Actor logic ---------------------------------------------------------- */
   private void onJoinGroupMsg(JoinGroupMsg msg) {
     for (int storageNodeId : msg.storageNodes.keySet()) {
-      System.out.println(storageNodeId);
       this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
     }
   }
 
-  public void getRequest(Integer storageNodeId, int key) {
-    GetRequestMsg m = new GetRequestMsg(key);
-    storageNodes.get(storageNodeId).tell(m, getSelf());
+  // forward the get message to the coordinator
+  private void onGetRequest(GetRequestMsg msg) {  
+    storageNodes.get(msg.storageNodeId).tell(msg, getSelf());
   }
 
-  public void updateRequest(Integer storageNodeId, int key, String value) {
-    UpdateRequestMsg m = new UpdateRequestMsg(key, value);
-    storageNodes.get(storageNodeId).tell(m, getSelf());
+  // forward the update message to the coordinator
+  private void onUpdateRequest(UpdateRequestMsg msg) {  
+    storageNodes.get(msg.storageNodeId).tell(msg, getSelf());
   }
 
   private void onGetResponse(GetResponseMsg m) {
@@ -99,13 +102,21 @@ public class ClientNode extends AbstractActor {
                 + m.item.version);
   }
 
-  // Here we define the mapping between the received message types
-  // and our actor methods
+  /*-- Auxiliary functions -------------------------------------------------- */
+
+  // log a given message while also printing the storage node id
+  void log(String message){
+    System.out.println("[C" + id + "] " + message);
+  }
+
+  // Mapping between the received message types and this actor methods
   @Override
   public Receive createReceive() {
     return receiveBuilder()
         .match(JoinGroupMsg.class, this::onJoinGroupMsg)
+        .match(GetRequestMsg.class, this::onGetRequest)
         .match(GetResponseMsg.class, this::onGetResponse)
+        .match(UpdateRequestMsg.class, this::onUpdateRequest)
         .match(UpdateResponseMsg.class, this::onUpdateResponse)
 
         .build();

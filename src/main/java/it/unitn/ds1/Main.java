@@ -2,10 +2,13 @@ package it.unitn.ds1;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
+import it.unitn.ds1.ClientNode.GetRequestMsg;
+import it.unitn.ds1.ClientNode.UpdateRequestMsg;
 import it.unitn.ds1.StorageNode.JoinGroupMsg;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -41,6 +44,58 @@ public class Main {
     for (int clientNodesId : clientNodes.keySet()) {
       clientNodes.get(clientNodesId).tell(start, ActorRef.noSender());
     }
+
+    // commands handler main loop
+    Scanner console = new Scanner(System.in);
+    System.out.println("===============================");
+    System.out.println("Syntax for the commands:\n- 'C1 S10 G 5' C1 select storage node 10 as the coordinator for a get request for the key 5\n- 'C1 S10 U 5 hello' C1 select storage node 10 as the coordinator for a update request to the key 5 with the new value 'hello'\n- 'q' to exit ");
+    System.out.println("===============================");
+
+    String command = "";
+    String[] splitted;
+
+    while(!command.equals("q")){
+      System.out.print("> ");
+      command = console.nextLine();
+
+      splitted = command.split(" ");
+
+      if (splitted.length == 4 && splitted[2].equals("G")){  // get request   
+
+        int key = Integer.parseInt(splitted[3]);
+        int clientnodeId = Integer.parseInt(splitted[0].substring(1));
+        int storagenodeId = Integer.parseInt(splitted[1].substring(1));
+
+        GetRequestMsg m = new GetRequestMsg(key, storagenodeId);
+        if (clientNodes.containsKey(clientnodeId)){
+          clientNodes.get(clientnodeId).tell(m, ActorRef.noSender());
+        }else{
+          System.out.println("C" + clientnodeId + " doesn't exists in the set of client nodes");
+        }
+
+      }else if(splitted.length == 5 && splitted[2].equals("U")){ // update request
+        
+        int key = Integer.parseInt(splitted[3]);
+        String value = splitted[4];
+        int clientnodeId = Integer.parseInt(splitted[0].substring(1));
+        int storagenodeId = Integer.parseInt(splitted[1].substring(1));
+
+        UpdateRequestMsg m = new UpdateRequestMsg(key, value, storagenodeId);
+        if (clientNodes.containsKey(clientnodeId)){
+          clientNodes.get(clientnodeId).tell(m, ActorRef.noSender());
+        }else{
+          System.out.println("C" + clientnodeId + " doesn't exists in the set of client nodes");
+        }
+
+      }else if (command.equals("q")){
+        System.out.println("Exiting");
+      }else {
+        System.out.println("Command not recognized as a valid one.");
+      }
+
+    }
+    
+    console.close();
 
     // system shutdown
     system.terminate();
