@@ -25,8 +25,6 @@ public class StorageNode extends AbstractActor {
   final static int W = 2;
   final static int T = 2;
 
-  public enum RequestType { READ, WRITE }
-
   // The set of all the storage node composing the storage network. This map
   // associates the node id to the corresponding ActorRef reference
   private Map<Integer, ActorRef> storageNodes;
@@ -54,6 +52,9 @@ public class StorageNode extends AbstractActor {
   private int requestId;
   private Map<Integer, ActorRef> requestSender;
   private Map<Integer, Boolean> fulfilled;
+
+  //keep track of which actor requested the lock of an item to avoid that an actor that did
+  //not lock the item unlock it
   private Map<Integer, ActorRef> locker;
   private Map<Integer, List<Item>> quorum;
 
@@ -152,12 +153,10 @@ public class StorageNode extends AbstractActor {
   public static class ReadRequest implements Serializable {
     public final int key;
     public final int requestId;
-    public final RequestType reqType;
 
-    public ReadRequest(int key, int requestId, RequestType reqType) {
+    public ReadRequest(int key, int requestId) {
       this.key = key;
       this.requestId = requestId;
-      this.reqType=reqType;
     }
   }
 
@@ -166,13 +165,11 @@ public class StorageNode extends AbstractActor {
     public final int key;
     public final Item item;
     public final int requestId;
-    public final RequestType reqType;
 
-    public ReadResponse(int key, String value, int version, int requestId, RequestType reqType) {
+    public ReadResponse(int key, String value, int version, int requestId) {
       this.key = key;
       this.item = new Item(value, version, false);
       this.requestId = requestId;
-      this.reqType = reqType;
     }
   }
 
@@ -491,7 +488,7 @@ public class StorageNode extends AbstractActor {
       value = storage.get(msg.key).value;
 
       // Send the item as a response to the request
-      ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId, msg.reqType);
+      ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId);
       getSender().tell(res, getSelf());
     
     }
@@ -549,7 +546,7 @@ public class StorageNode extends AbstractActor {
 
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
-    ReadRequest readMsg = new ReadRequest(msg.key, this.requestId, RequestType.READ);
+    ReadRequest readMsg = new ReadRequest(msg.key, this.requestId);
     requestSender.put(this.requestId, getSender());
 
     this.requestId++; // increase the request id for following requests
