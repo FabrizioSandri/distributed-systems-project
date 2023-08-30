@@ -4,9 +4,11 @@ package it.unitn.ds1;
 public class Item {
   public String value;
   public int version;
+  public boolean lock; 
 
-  Item(String value, int version){
+  Item(String value, int version, boolean lock){
     this.value = value;
     this.version = version;
+    this.lock = lock;
   }
 }
