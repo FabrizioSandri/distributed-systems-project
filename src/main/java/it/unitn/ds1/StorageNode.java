@@ -135,7 +135,7 @@ public class StorageNode extends AbstractActor {
 
     public UpToDateItemResponse(int key, String value, int version) {
       this.key = key;
-      this.item = new Item(value, version);
+      this.item = new Item(value, version, false);
     }
   }
 
@@ -341,7 +341,7 @@ public class StorageNode extends AbstractActor {
       quorum.put(requestId, new ArrayList<>());
     }
 
-    Item readResponse = new Item(msg.item.value, msg.item.version);
+    Item readResponse = new Item(msg.item.value, msg.item.version, msg.item.lock);
     quorum.get(requestId).add(readResponse);
 
     // As soon as R replies arrive for all the items that are necessary before
