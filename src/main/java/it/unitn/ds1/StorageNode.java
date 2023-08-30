@@ -35,7 +35,16 @@ public class StorageNode extends AbstractActor {
   // to items(value and version)
   private Map<Integer, Item> storage;
 
-  private int id; // the node id
+  private int nodeId; // the node id
+
+  // List of items keys that are necessary for a node that is joining the
+  // network. The joining node must retrieve the most updated version of these
+  // items
+  List<Integer> necessaryItems;
+  
+  // The node employs this boolean variable to ignore any join messages it
+  // receives once it has finished the joining process.
+  boolean joined; 
 
   // This variable holds thr count of incoming client requests. It serves the
   // purpose of distinguishing between different requests. Whenever a client
@@ -53,10 +62,10 @@ public class StorageNode extends AbstractActor {
   private Map<Integer, String> toWrite;
 
   /*-- StorageNode constructors --------------------------------------------- */
-  public StorageNode(int id) {
-    this.id = id;
+  public StorageNode() {
     this.requestId = 0;
-    
+    this.joined = false;
+
     requestSender = new HashMap<>();
     storageNodes = new HashMap<>();
     storage = new HashMap<>();
@@ -66,16 +75,76 @@ public class StorageNode extends AbstractActor {
     locker = new HashMap<>();
   }
 
-  static public Props props(int id) {
-    return Props.create(StorageNode.class, () -> new StorageNode(id));
+  static public Props props() {
+    return Props.create(StorageNode.class, () -> new StorageNode());
   }
 
   /*-- Message classes ------------------------------------------------------ */
-  public static class JoinGroupMsg implements Serializable {
+  public static class JoinMsg implements Serializable {
+    public final ActorRef bootstrappingPeer;
+    public final int nodeId;
+    public final boolean firstNode;
+
+    public JoinMsg(int nodeId, ActorRef bootstrappingPeer, boolean firstNode) {
+      this.bootstrappingPeer = bootstrappingPeer;
+      this.nodeId = nodeId;
+      this.firstNode = firstNode;
+    }
+  }
+
+  public static class GetSetOfNodesMsg implements Serializable { }
+
+  public static class SetOfNodesMsg implements Serializable {
     public final Map<Integer, ActorRef> storageNodes;
 
-    public JoinGroupMsg(Map<Integer, ActorRef> storageNodes) {
-      this.storageNodes = Collections.unmodifiableMap(new HashMap<Integer, ActorRef>(storageNodes));
+    SetOfNodesMsg(Map<Integer, ActorRef> storageNodes){
+      this.storageNodes = Collections.unmodifiableMap(new HashMap<Integer, ActorRef>(storageNodes)); 
+    }
+  }
+
+  // Request the necessary items for a given nodeId
+  public static class GetNecessaryItemsMsg implements Serializable {
+    public final int nodeId;
+
+    public GetNecessaryItemsMsg(int nodeId) {
+      this.nodeId = nodeId;
+    }
+  }
+
+  public static class NecessaryItemsMsg implements Serializable {
+    List<Integer> necessaryItems;
+
+    NecessaryItemsMsg(List<Integer> necessaryItems) {
+      this.necessaryItems = Collections.unmodifiableList(new ArrayList<Integer>(necessaryItems));
+    }
+  }
+
+  // Request for an item during the joining phase
+  public static class UpToDateItemRequest implements Serializable {
+    public final int key;
+
+    public UpToDateItemRequest(int key) {
+      this.key = key;
+    }
+  }
+
+  // Request for an item during the joining phase
+  public static class UpToDateItemResponse implements Serializable {
+    public final int key;
+    public final Item item;
+
+    public UpToDateItemResponse(int key, String value, int version) {
+      this.key = key;
+      this.item = new Item(value, version);
+    }
+  }
+
+  // Announces the given nodeId to the whole storage network
+  public static class AnnounceJoinMsg implements Serializable {
+    public final int nodeId;
+
+    public AnnounceJoinMsg(int nodeId){
+      this.nodeId = nodeId;
     }
   }
 
@@ -156,12 +225,189 @@ public class StorageNode extends AbstractActor {
   }    
 
   /*-- Message handlers ----------------------------------------------------- */
-  private void onJoinGroupMsg(JoinGroupMsg msg) {
+  private void onJoinMsg(JoinMsg msg) {
+
+    this.nodeId = msg.nodeId;     // save the current node id
+    log("Joining the storage network");
+    
+    // Add myself to the current set of storage nodes
+    this.storageNodes.put(this.nodeId, getSelf());
+
+    // The first node joining the storage network has no bootstrapping peer and
+    // thus only adds itself to the set of storage nodes
+    if (msg.firstNode){
+      this.joined = true;
+      log("Joined the storage network");
+    }else{
+      // The joining node contacts the bootstrapping peer to retrieve the current
+      // set of nodes constituting the network.
+      msg.bootstrappingPeer.tell(new GetSetOfNodesMsg(), getSelf());
+
+    }
+
+  }
+
+  private void onGetSetOfNodesMsg(GetSetOfNodesMsg msg) {
+    getSender().tell(new SetOfNodesMsg(storageNodes), getSelf());
+  }
+
+  private void onSetOfNodesMsg(SetOfNodesMsg msg) {
+
+    // Save the current set of nodes constituting the network.
     for (int storageNodeId: msg.storageNodes.keySet()) {
       this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
     }
-    log("Joined the storage network");
+
+    // If the count of storage nodes in the network is below R, it indicates
+    // that the network is in its starting stage, with initial nodes joining. In
+    // this phase, nodes don't ask about the data they're responsible for, since
+    // it's not possible for a node to find write quorum during this time.
+    if (this.storageNodes.size() < R){
+      
+      announceJoin();
+
+    }else {
+      // Request data items it is responsible for from its clockwise neighbor
+      int clockwiseNeighbor = findClockWiseNeighbor(this.nodeId);
+      this.storageNodes.get(clockwiseNeighbor).tell(new GetNecessaryItemsMsg(this.nodeId), getSelf());
+    }
+    
   }
+
+  private void onGetNecessaryItemsMsg(GetNecessaryItemsMsg msg) {
+    List<Integer> necessaryItems = new ArrayList<>(); 
+
+    for (int key : storage.keySet()){
+      if (key <= msg.nodeId){
+        necessaryItems.add(key);
+      }
+    }
+
+    // Respond with the list of necessary items
+    getSender().tell(new NecessaryItemsMsg(necessaryItems), getSelf());
+  }
+
+  private void onNecessaryItemsMsg(NecessaryItemsMsg msg) {
+    this.necessaryItems = msg.necessaryItems; // save the set of necessary items
+
+    // Perform read operations to ensure that the items from the clockwise
+    // neighbor storage node are up to date    
+    for (int key : msg.necessaryItems){
+      // contact all the N nodes for the given key
+      List<Integer> nodesToBeContacted = findNodesForKey(key);
+
+      for (int storageNodeId : nodesToBeContacted){
+        storageNodes.get(storageNodeId).tell(new UpToDateItemRequest(key), getSelf());
+      }
+    }
+
+    // No message to retrieve from the other nodes
+    if (msg.necessaryItems.isEmpty()){
+      announceJoin();
+    }
+   
+  }
+
+  private void onUpToDateItemRequest(UpToDateItemRequest msg) {
+    int version = 0;
+    String value = "";
+
+    // Check if the storage contains the requested item
+    if (storage.containsKey(msg.key)) {
+      version = storage.get(msg.key).version;
+      value = storage.get(msg.key).value;
+
+      // Send the item as a response to the request
+      UpToDateItemResponse res = new UpToDateItemResponse(msg.key, value, version);
+      getSender().tell(res, getSelf());
+
+    }
+  }
+
+  private void onUpToDateItemResponse(UpToDateItemResponse msg) {
+
+    // The node has already joined thus ignore all the join messages that are
+    // still flying on the links
+    if (this.joined){
+      return;
+    }
+
+    // in this first par we use the msg.key as a way to disambiguate between
+    // requests
+    int requestId = msg.key;
+
+    // if this is the first response create the list to hold the quorum
+    if (!quorum.containsKey(requestId)) { 
+      quorum.put(requestId, new ArrayList<>());
+    }
+
+    Item readResponse = new Item(msg.item.value, msg.item.version);
+    quorum.get(requestId).add(readResponse);
+
+    // As soon as R replies arrive for all the items that are necessary before
+    // joining, the node can finally announce its presence to every node in the
+    // system
+    boolean receivedAllNecessary = true;
+    for (int necessaryItemKey : this.necessaryItems){
+      if (quorum.get(necessaryItemKey).size() < R){
+        receivedAllNecessary = false;
+        break;
+      }
+    }
+
+    // After receiving all the updated data items, the node can finally announce
+    // its presence to every node in the system
+    if (receivedAllNecessary){
+
+      // for each necessary item, store in the storage of this new node the most
+      // recent version of the item
+      for (int necessaryItemKey : this.necessaryItems){
+        Item mostRecentItem = quorum.get(necessaryItemKey).get(0);
+        int mostRecentVersion = quorum.get(necessaryItemKey).get(0).version;
+        
+        // find the item with the highest version
+        for (Item it : quorum.get(necessaryItemKey)){
+          if (it.version > mostRecentVersion){
+            mostRecentItem = it;
+            mostRecentVersion = it.version;
+          }
+        }
+
+        // save the most recent item in the storage of the new storage node
+        storage.put(necessaryItemKey, mostRecentItem);
+      }
+
+      announceJoin(); // announce to the whole storage network
+
+    }
+
+  }
+
+  // Executed when a new node joins the system
+  private void onAnnounceJoinMsg(AnnounceJoinMsg msg) {
+    
+    // Add the new storage node
+    storageNodes.put(msg.nodeId, getSender());
+
+    // Eliminate any keys that are no longer required. This involves iterating
+    // through all the keys and verifying whether the current node is part of
+    // the list of nodes responsible for the given key.
+    List<Integer> toRemove = new ArrayList<>();
+    for (int key : storage.keySet()){
+      List<Integer> nodesForKey = findNodesForKey(key);
+
+      if (!nodesForKey.contains(this.nodeId)){
+        toRemove.add(key);
+      }
+    }
+    
+    for (int key : toRemove){
+      storage.remove(key);
+    }
+
+  }
+
+  
   
   private void onWriteRequest(WriteRequestMsg msg) {
     int version = 0;
@@ -408,16 +654,71 @@ public class StorageNode extends AbstractActor {
     return nodesToBeContacted;
   }
 
+  // Finds the id of the clockwise neighbor of a given node with id nodeId
+  int findClockWiseNeighbor(int nodeId){
+
+    int neighborId = -1;
+
+    List<Integer> keySet = new ArrayList<>(storageNodes.keySet());
+    Collections.sort(keySet);
+
+    for(int i=0; i<storageNodes.size(); i++){ 
+      if (keySet.get(i) >= nodeId){
+        neighborId = keySet.get(i);
+        break;
+      }
+    }
+
+    // if there is no bigger node than nodeId(i.e. the new node has the highest
+    // id) then the clockwise neighbor is the node with the smallest id(modulo)
+    if (neighborId == -1){ 
+      neighborId = keySet.get(0);
+    }
+
+    return neighborId;
+  }
+
+  // Announce the presence of this node to every node in the system
+  private void announceJoin(){
+
+    // the node has joined, thus ignore all the future join messages
+    this.joined = true; 
+
+    AnnounceJoinMsg announceMsg = new AnnounceJoinMsg(this.nodeId);
+    for(int nodeId : storageNodes.keySet()){ 
+      if (nodeId == this.nodeId){
+        continue;
+      }
+      storageNodes.get(nodeId).tell(announceMsg, getSelf());
+    }
+    
+    // At the end clear the quorum hashmap to serve future requests
+    quorum.clear();
+
+    log("Joined the storage network");
+  }
+
+
   // log a given message while also printing the storage node id
   void log(String message){
-    System.out.println("[S" + id + "] " + message);
+    System.out.println("[S" + this.nodeId + "] " + message);
   }
 
   // Mapping between the received message types and this actor methods
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-        .match(JoinGroupMsg.class, this::onJoinGroupMsg)
+        // Item repartitioning messages
+        .match(JoinMsg.class, this::onJoinMsg)
+        .match(GetSetOfNodesMsg.class, this::onGetSetOfNodesMsg)
+        .match(SetOfNodesMsg.class, this::onSetOfNodesMsg)
+        .match(GetNecessaryItemsMsg.class, this::onGetNecessaryItemsMsg)
+        .match(NecessaryItemsMsg.class, this::onNecessaryItemsMsg)
+        .match(UpToDateItemRequest.class, this::onUpToDateItemRequest)
+        .match(UpToDateItemResponse.class, this::onUpToDateItemResponse)
+        .match(AnnounceJoinMsg.class, this::onAnnounceJoinMsg)
+
+        // Replication messages
         .match(ReadRequest.class, this::onReadRequest)
         .match(UpdateRequestMsg.class, this::onUpdateRequest)
         .match(GetRequestMsg.class, this::onGetRequest)

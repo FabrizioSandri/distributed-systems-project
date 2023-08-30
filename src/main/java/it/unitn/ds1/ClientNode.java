@@ -2,20 +2,15 @@ package it.unitn.ds1;
 
 import akka.actor.*;
 import java.io.Serializable;
-import java.util.*;
-import it.unitn.ds1.StorageNode.JoinGroupMsg;;
 
 public class ClientNode extends AbstractActor {
 
   // Client Node variables
   private int id;
-  private Map<Integer, ActorRef> storageNodes;
 
   /*-- Actor constructors --------------------------------------------------- */
   public ClientNode(int id) {
     this.id = id;
-    storageNodes = new HashMap<>();
-    log("Joined the network");
   }
 
   static public Props props(int id) {
@@ -23,34 +18,34 @@ public class ClientNode extends AbstractActor {
   }
 
   /*-- Message classes ------------------------------------------------------ */
+  public static class JoinGroupMsg implements Serializable { }
 
   // --requests
   public static class UpdateRequestMsg implements Serializable {
     // public final int requestId;
     public final int key;
     public final String value;
-    public final int storageNodeId;
+    public final ActorRef storageNodeRef;
 
-    public UpdateRequestMsg(int key, String value, int storageNodeId) {
+    public UpdateRequestMsg(int key, String value, ActorRef storageNodeRef) {
       this.key = key;
       this.value = value;
-      this.storageNodeId = storageNodeId;
+      this.storageNodeRef = storageNodeRef;
     }
   }
 
   public static class GetRequestMsg implements Serializable {
-    // public final int requestId;
     public final int key;
-    public final int storageNodeId;
-    public GetRequestMsg(int key, int storageNodeId) {
+    public final ActorRef storageNodeRef;
+
+    public GetRequestMsg(int key, ActorRef storageNodeRef) {
       this.key = key;
-      this.storageNodeId = storageNodeId;
+      this.storageNodeRef = storageNodeRef;
     }
   }
 
   // --responses
   public static class UpdateResponseMsg implements Serializable {
-    // public final int requestId;
     public final int key;
     public final Item item;
 
@@ -61,7 +56,6 @@ public class ClientNode extends AbstractActor {
   }
 
   public static class GetResponseMsg implements Serializable {
-    // public final int requestId;
     public final Item item;
 
     public GetResponseMsg(Item item) {
@@ -79,31 +73,25 @@ public class ClientNode extends AbstractActor {
 
   /*-- Actor logic ---------------------------------------------------------- */
   private void onJoinGroupMsg(JoinGroupMsg msg) {
-    for (int storageNodeId : msg.storageNodes.keySet()) {
-      this.storageNodes.put(storageNodeId, msg.storageNodes.get(storageNodeId));
-    }
+    log("Joined the network");
   }
 
   // forward the get message to the coordinator
   private void onGetRequest(GetRequestMsg msg) {  
-    storageNodes.get(msg.storageNodeId).tell(msg, getSelf());
+    msg.storageNodeRef.tell(msg, getSelf());
   }
 
   // forward the update message to the coordinator
   private void onUpdateRequest(UpdateRequestMsg msg) {  
-    storageNodes.get(msg.storageNodeId).tell(msg, getSelf());
+    msg.storageNodeRef.tell(msg, getSelf());
   }
 
   private void onGetResponse(GetResponseMsg msg) {
     log("Get response: '" + msg.item.value + "' (v" + msg.item.version + ")");
   }
 
-  private void onUpdateResponse(UpdateResponseMsg m) {
-    System.out
-        .println(
-            "Get Response from storage node: " + getSender().path().name() + "for key " + m.key + " with value "
-                + m.item.value + " and with version v"
-                + m.item.version);
+  private void onUpdateResponse(UpdateResponseMsg msg) {
+    log("Update response: '" + msg.item.value + "' (v" + msg.item.version + ")");
   }
 
   // Handle error messages
