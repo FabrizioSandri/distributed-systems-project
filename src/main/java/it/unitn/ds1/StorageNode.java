@@ -51,18 +51,26 @@ public class StorageNode extends AbstractActor {
   // requestSender then maps request IDs to their originating clients.
   private int requestId;
   private Map<Integer, ActorRef> requestSender;
-  private Map<Integer, Boolean> fulfilled;
+  private Map<Integer, Boolean> fulfilled;  // tells if a request id has been fulfilled
 
-  //keep track of which actor requested the lock of an item to avoid that an actor that did
-  //not lock the item unlock it
-  private Map<Integer, ActorRef> locker;
+  // Maintains a record of the actor who initiated the item lock to prevent any
+  // actor not responsible for the lock from unlocking it.
+  private Map<Integer, ActorRef> lockedBy;
+
+  // The items obtained from read requests for each request ID are stored in
+  // this variable. This serves the purpose of both obtaining the most recent
+  // version among the received items for a specific requestId and also for
+  // determining if the quorum criteria are met for that requestId.
   private Map<Integer, List<Item>> quorum;
 
   // Used by the coordinator to retrieve the value to be written in a write
   // request given the request id  
   private Map<Integer, String> toWrite;
 
+  /*------------------------------------------------------------------------- */
   /*-- StorageNode constructors --------------------------------------------- */
+  /*------------------------------------------------------------------------- */
+
   public StorageNode() {
     this.requestId = 0;
     this.joined = false;
@@ -73,14 +81,18 @@ public class StorageNode extends AbstractActor {
     quorum = new HashMap<>();
     fulfilled = new HashMap<>();
     toWrite = new HashMap<>();
-    locker = new HashMap<>();
+    lockedBy = new HashMap<>();
   }
 
   static public Props props() {
     return Props.create(StorageNode.class, () -> new StorageNode());
   }
+  
+  /*------------------------------------------------------------------------- */
+  /*-- Message classes - Item repartitioning -------------------------------- */
+  /*------------------------------------------------------------------------- */
 
-  /*-- Message classes ------------------------------------------------------ */
+  // Join operation for a newly created node
   public static class JoinMsg implements Serializable {
     public final ActorRef bootstrappingPeer;
     public final int nodeId;
@@ -93,8 +105,10 @@ public class StorageNode extends AbstractActor {
     }
   }
 
+  // Requests the set of storage nodes in the storage network
   public static class GetSetOfNodesMsg implements Serializable { }
 
+  // Response for the set of storage nodes in the storage network
   public static class SetOfNodesMsg implements Serializable {
     public final Map<Integer, ActorRef> storageNodes;
 
@@ -112,6 +126,7 @@ public class StorageNode extends AbstractActor {
     }
   }
 
+  // Response for the necessary items
   public static class NecessaryItemsMsg implements Serializable {
     List<Integer> necessaryItems;
 
@@ -129,7 +144,7 @@ public class StorageNode extends AbstractActor {
     }
   }
 
-  // Request for an item during the joining phase
+  // Response for an item during the joining phase
   public static class UpToDateItemResponse implements Serializable {
     public final int key;
     public final Item item;
@@ -148,6 +163,10 @@ public class StorageNode extends AbstractActor {
       this.nodeId = nodeId;
     }
   }
+
+  /*------------------------------------------------------------------------- */
+  /*-- Message classes - Replication ---------------------------------------- */
+  /*------------------------------------------------------------------------- */
 
   // Request for an item sent from a storage node to storage node
   public static class ReadRequest implements Serializable {
@@ -221,7 +240,10 @@ public class StorageNode extends AbstractActor {
     }
   }    
 
-  /*-- Message handlers ----------------------------------------------------- */
+  /*------------------------------------------------------------------------- */
+  /*-- Message handlers - Item repartitioning ------------------------------- */
+  /*------------------------------------------------------------------------- */
+
   private void onJoinMsg(JoinMsg msg) {
 
     this.nodeId = msg.nodeId;     // save the current node id
@@ -380,7 +402,6 @@ public class StorageNode extends AbstractActor {
 
   }
 
-  // Executed when a new node joins the system
   private void onAnnounceJoinMsg(AnnounceJoinMsg msg) {
     
     // Add the new storage node
@@ -403,29 +424,33 @@ public class StorageNode extends AbstractActor {
     }
 
   }
-
   
+  /*------------------------------------------------------------------------- */
+  /*-- Message handlers - Replication --------------------------------------- */
+  /*------------------------------------------------------------------------- */
   
   private void onWriteRequest(WriteRequestMsg msg) {
     int version = 0;
     
-    if (storage.containsKey(msg.key) && !storage.get(msg.key).lock){ // check if item already exists in the storage and if someone is already using it
+    // Check if the item is already locked by someone else
+    if (storage.containsKey(msg.key) && !storage.get(msg.key).lock){ 
       storage.get(msg.key).lock = true; 
       
-      // save the client that locked the item, also signaling that there is already someone that is working on the key
-      locker.put(msg.key, msg.clientNode);  
+      // Save the client that locked the item, also signaling that there is
+      // already someone that is working on the key
+      lockedBy.put(msg.key, msg.clientNode);  
 
-      // Check if the storage contains the requested item
       version = storage.get(msg.key).version;
 
       // Send the item as a response to the request
       WriteResponseMsg res = new WriteResponseMsg(version, msg.key, msg.requestId);
       getSender().tell(res, getSelf());
     
-    }else if(!locker.containsKey(msg.key)){ // check if a creation of the item is taking place, if not create then the item
+    }else if(!lockedBy.containsKey(msg.key)){ // check if a creation of the item is taking place, if not create then the item
 
-      // save the client that locked the item, signaling that there is already someone that is working on the item
-      locker.put(msg.key, msg.clientNode); 
+      // save the client that locked the item, signaling that there is already
+      // someone that is working on the item
+      lockedBy.put(msg.key, msg.clientNode); 
     
       // Send the item as a response to the request
       WriteResponseMsg res = new WriteResponseMsg(version, msg.key, msg.requestId);
@@ -588,7 +613,7 @@ public class StorageNode extends AbstractActor {
     
     // unlock the item to state that the creation happened or 
     //the updating from a client finished (setted in onWriteRequest to avoid w-w conflint during creation or ordinary update)
-    locker.remove(msg.key);
+    lockedBy.remove(msg.key);
     log("The item with key " + msg.key + " has been updated to '" + msg.item.value + "' (v" + msg.item.version + ")");
   }
 
@@ -614,8 +639,8 @@ public class StorageNode extends AbstractActor {
     // permit to unlock the items only to the coordinator that started an update that timed out 
     // the lock request was tracked using the client node reference since an actor can 
     // make a request at the time 
-    if (locker.containsKey(msg.key) && locker.get(msg.key) == msg.requester){ 
-      locker.remove(msg.key);
+    if (lockedBy.containsKey(msg.key) && lockedBy.get(msg.key) == msg.requester){ 
+      lockedBy.remove(msg.key);
 
       //need to unlock the item lock if the node manage to get the lock on it even if the request timed out 
       if (storage.containsKey(msg.key)){

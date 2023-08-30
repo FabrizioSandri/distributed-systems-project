@@ -13,9 +13,6 @@ import java.util.HashMap;
 
 public class Main {
 
-  final static int N_STORAGE_NODES = 5;
-  final static int N_CLIENT_NODES = 5;
-
   public static void main(String[] args) {
 
     // Create the actor system
