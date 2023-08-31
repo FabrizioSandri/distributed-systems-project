@@ -141,20 +141,20 @@ public class StorageNode extends AbstractActor {
   }
 
   // Request for an item during the joining phase
-  public static class UpToDateItemRequest implements Serializable {
+  public static class UpToDateItemRequestMsg implements Serializable {
     public final int key;
 
-    public UpToDateItemRequest(int key) {
+    public UpToDateItemRequestMsg(int key) {
       this.key = key;
     }
   }
 
   // Response for an item during the joining phase
-  public static class UpToDateItemResponse implements Serializable {
+  public static class UpToDateItemResponseMsg implements Serializable {
     public final int key;
     public final Item item;
 
-    public UpToDateItemResponse(int key, String value, int version) {
+    public UpToDateItemResponseMsg(int key, String value, int version) {
       this.key = key;
       this.item = new Item(value, version, false);
     }
@@ -189,23 +189,23 @@ public class StorageNode extends AbstractActor {
   /*------------------------------------------------------------------------- */
 
   // Request for an item sent from a storage node to storage node
-  public static class ReadRequest implements Serializable {
+  public static class ReadRequestMsg implements Serializable {
     public final int key;
     public final int requestId;
 
-    public ReadRequest(int key, int requestId) {
+    public ReadRequestMsg(int key, int requestId) {
       this.key = key;
       this.requestId = requestId;
     }
   }
 
   // Response for an item sent from a storage node to storage node that asked it
-  public static class ReadResponse implements Serializable {
+  public static class ReadResponseMsg implements Serializable {
     public final int key;
     public final Item item;
     public final int requestId;
 
-    public ReadResponse(int key, String value, int version, int requestId) {
+    public ReadResponseMsg(int key, String value, int version, int requestId) {
       this.key = key;
       this.item = new Item(value, version, false);
       this.requestId = requestId;
@@ -349,7 +349,7 @@ public class StorageNode extends AbstractActor {
       List<Integer> nodesToBeContacted = findNodesForKey(key);
 
       for (int storageNodeId : nodesToBeContacted){
-        storageNodes.get(storageNodeId).tell(new UpToDateItemRequest(key), getSelf());
+        storageNodes.get(storageNodeId).tell(new UpToDateItemRequestMsg(key), getSelf());
       }
     }
 
@@ -364,7 +364,7 @@ public class StorageNode extends AbstractActor {
     }
   }
 
-  private void onUpToDateItemRequest(UpToDateItemRequest msg) {
+  private void onUpToDateItemRequestMsg(UpToDateItemRequestMsg msg) {
     int version = 0;
     String value = "";
 
@@ -374,13 +374,13 @@ public class StorageNode extends AbstractActor {
       value = storage.get(msg.key).value;
 
       // Send the item as a response to the request
-      UpToDateItemResponse res = new UpToDateItemResponse(msg.key, value, version);
+      UpToDateItemResponseMsg res = new UpToDateItemResponseMsg(msg.key, value, version);
       getSender().tell(res, getSelf());
 
     }
   }
 
-  private void onUpToDateItemResponse(UpToDateItemResponse msg) {
+  private void onUpToDateItemResponseMsg(UpToDateItemResponseMsg msg) {
 
     // The node has already joined thus ignore all the join messages that are
     // still flying on the links
@@ -531,7 +531,7 @@ public class StorageNode extends AbstractActor {
   /*-- Message handlers - Replication --------------------------------------- */
   /*------------------------------------------------------------------------- */
   
-  private void onWriteRequest(WriteRequestMsg msg) {
+  private void onWriteRequestMsg(WriteRequestMsg msg) {
     int version = 0;
     
     // Check if the item is already locked by someone else
@@ -566,7 +566,7 @@ public class StorageNode extends AbstractActor {
     }
   }
 
-  private void onWriteResponse(WriteResponseMsg msg) {
+  private void onWriteResponseMsg(WriteResponseMsg msg) {
     int requestId = msg.requestId;
 
     // if this is the first response create the list to hold the quorum
@@ -609,7 +609,7 @@ public class StorageNode extends AbstractActor {
   }
 
 
-  private void onReadRequest(ReadRequest msg) {
+  private void onReadRequestMsg(ReadRequestMsg msg) {
     int version = 0;
     String value = "";
       
@@ -619,13 +619,13 @@ public class StorageNode extends AbstractActor {
       value = storage.get(msg.key).value;
 
       // Send the item as a response to the request
-      ReadResponse res = new ReadResponse(msg.key, value, version, msg.requestId);
+      ReadResponseMsg res = new ReadResponseMsg(msg.key, value, version, msg.requestId);
       getSender().tell(res, getSelf());
     
     }
   }
 
-  private void onReadResponse(ReadResponse msg) {
+  private void onReadResponseMsg(ReadResponseMsg msg) {
 
     int requestId = msg.requestId;
 
@@ -663,7 +663,7 @@ public class StorageNode extends AbstractActor {
     
   }
 
-  private void onGetRequest(GetRequestMsg msg) {
+  private void onGetRequestMsg(GetRequestMsg msg) {
 
     // schedule the timeout after T seconds
     getContext().system().scheduler().scheduleOnce(
@@ -676,7 +676,7 @@ public class StorageNode extends AbstractActor {
 
     // Contact the N nodes
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
-    ReadRequest readMsg = new ReadRequest(msg.key, this.requestId);
+    ReadRequestMsg readMsg = new ReadRequestMsg(msg.key, this.requestId);
     requestSender.put(this.requestId, getSender());
 
     this.requestId++; // increase the request id for following requests
@@ -686,7 +686,7 @@ public class StorageNode extends AbstractActor {
 
   }
 
-  private void onUpdateRequest(UpdateRequestMsg msg) {
+  private void onUpdateRequestMsg(UpdateRequestMsg msg) {
 
     // schedule the timeout after T seconds
     getContext().system().scheduler().scheduleOnce(
@@ -713,17 +713,17 @@ public class StorageNode extends AbstractActor {
     }
   }
 
-  private void onUpdateResponse(UpdateResponseMsg msg){
+  private void onUpdateResponseMsg(UpdateResponseMsg msg){
     //save the new item in the storage
     storage.put(msg.key, new Item(msg.item.value, msg.item.version, false));
     
     // unlock the item to state that the creation happened or 
-    // the updating from a client finished (set in onWriteRequest to avoid w-w conflicts during creation or ordinary update)
+    // the updating from a client finished (set in onWriteRequestMsg to avoid w-w conflicts during creation or ordinary update)
     lockedBy.remove(msg.key);
     log("The item with key " + msg.key + " has been updated to '" + msg.item.value + "' (v" + msg.item.version + ")");
   }
 
-  private void onTimeout(TimeoutMsg msg) {    
+  private void onTimeoutMsg(TimeoutMsg msg) {    
     fulfilled.put(msg.requestId, true);
     List<Integer> nodesToBeContacted = findNodesForKey(msg.key);
 
@@ -741,7 +741,7 @@ public class StorageNode extends AbstractActor {
     }
   }
 
-  private void onReleaseLock(ReleaseLockMsg msg){
+  private void onReleaseLockMsg(ReleaseLockMsg msg){
     // permit to unlock the items only to the coordinator that started an update that timed out 
     // the lock request was tracked using the client node reference since an actor can 
     // make a request at the time 
@@ -866,8 +866,8 @@ public class StorageNode extends AbstractActor {
         .match(SetOfNodesMsg.class, this::onSetOfNodesMsg)
         .match(GetNecessaryItemsMsg.class, this::onGetNecessaryItemsMsg)
         .match(NecessaryItemsMsg.class, this::onNecessaryItemsMsg)
-        .match(UpToDateItemRequest.class, this::onUpToDateItemRequest)
-        .match(UpToDateItemResponse.class, this::onUpToDateItemResponse)
+        .match(UpToDateItemRequestMsg.class, this::onUpToDateItemRequestMsg)
+        .match(UpToDateItemResponseMsg.class, this::onUpToDateItemResponseMsg)
         .match(AnnounceJoinMsg.class, this::onAnnounceJoinMsg)
         
         // Leave
@@ -875,15 +875,15 @@ public class StorageNode extends AbstractActor {
         .match(AnnounceLeaveMsg.class, this::onAnnounceLeaveMsg)
 
         /* -- Replication messages ------------------------------------------ */ 
-        .match(ReadRequest.class, this::onReadRequest)
-        .match(UpdateRequestMsg.class, this::onUpdateRequest)
-        .match(GetRequestMsg.class, this::onGetRequest)
-        .match(ReadResponse.class, this::onReadResponse)
-        .match(WriteRequestMsg.class,this::onWriteRequest)
-        .match(WriteResponseMsg.class, this::onWriteResponse)
-        .match(UpdateResponseMsg.class, this::onUpdateResponse)
-        .match(TimeoutMsg.class, this::onTimeout)
-        .match(ReleaseLockMsg.class, this::onReleaseLock)
+        .match(ReadRequestMsg.class, this::onReadRequestMsg)
+        .match(UpdateRequestMsg.class, this::onUpdateRequestMsg)
+        .match(GetRequestMsg.class, this::onGetRequestMsg)
+        .match(ReadResponseMsg.class, this::onReadResponseMsg)
+        .match(WriteRequestMsg.class,this::onWriteRequestMsg)
+        .match(WriteResponseMsg.class, this::onWriteResponseMsg)
+        .match(UpdateResponseMsg.class, this::onUpdateResponseMsg)
+        .match(TimeoutMsg.class, this::onTimeoutMsg)
+        .match(ReleaseLockMsg.class, this::onReleaseLockMsg)
         .match(CrashMsg.class,this::onCrashMsg)
         .build();
   }

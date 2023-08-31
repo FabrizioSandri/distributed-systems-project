@@ -53,7 +53,7 @@ public class Main {
     // commands handler main loop
     Scanner console = new Scanner(System.in);
     System.out.println("===============================");
-    System.out.println("Syntax for the commands:\n- 'J 5 10' add a new storage node with id 5 to the storage network using node 10 as bootstrapping peer. If the node is the first one, leave the bootstrapping peer parameter empty\n- 'L 5' tell node 5 to leave the storage network \n- 'C1 10 G 5' C1 select storage node 10 as the coordinator for a get request for the key 5\n- 'C1 10 U 5 hello' C1 select storage node 10 as the coordinator for a update request to the key 5 with the new value 'hello'\n- 'C 2' make the storage node with id eqauls 2 crash\n- 'R 2 3' Make the storage node with id equals 2 recover using the storage node with id equals 3 as bootstrapping recovery peer\n- 'q' to exit ");
+    System.out.println("Syntax for the commands:\n- 'J 5 10' add a new storage node with id 5 to the storage network using node 10 as bootstrapping peer. If the node is the first one, leave the bootstrapping peer parameter empty\n- 'L 5' tell node 5 to leave the storage network \n- 'C1 10 G 5' C1 select storage node 10 as the coordinator for a get request for the key 5\n- 'C1 10 U 5 hello' C1 select storage node 10 as the coordinator for a update request to the key 5 with the new value 'hello'\n- 'C 2' make the storage node with id 2 crash\n- 'R 2 3' Make the storage node with id 2 recover using the storage node with id 3 as bootstrapping recovery peer\n- 'q' to exit ");
     System.out.println("===============================");
 
     String command = "";
@@ -102,7 +102,7 @@ public class Main {
             storageJoin = new JoinMsg(newNodeId, storageNodes.get(bootstrappingPeerId), false);
             storageNodes.get(newNodeId).tell(storageJoin, ActorRef.noSender());
           }else {
-            log("The bootstrapping peer that you sepcified doesn't exists.");
+            log("The bootstrapping peer that you specified doesn't exists.");
           }
         }
 
@@ -122,28 +122,28 @@ public class Main {
       }else if (splitted.length == 4 && splitted[2].equals("G")){  // get request   
 
         int key = Integer.parseInt(splitted[3]);
-        int clientnodeId = Integer.parseInt(splitted[0].substring(1));
-        int storagenodeId = Integer.parseInt(splitted[1]);
+        int clientNodeId = Integer.parseInt(splitted[0].substring(1));
+        int storageNodeId = Integer.parseInt(splitted[1]);
 
-        GetRequestMsg m = new GetRequestMsg(key, storageNodes.get(storagenodeId));
-        if (clientNodes.containsKey(clientnodeId)){
-          clientNodes.get(clientnodeId).tell(m, ActorRef.noSender());
+        GetRequestMsg m = new GetRequestMsg(key, storageNodes.get(storageNodeId));
+        if (clientNodes.containsKey(clientNodeId)){
+          clientNodes.get(clientNodeId).tell(m, ActorRef.noSender());
         }else{
-          log("C" + clientnodeId + " doesn't exists in the set of client nodes");
+          log("C" + clientNodeId + " doesn't exists in the set of client nodes");
         }
 
       }else if(splitted.length == 5 && splitted[2].equals("U")){ // update request
         
         int key = Integer.parseInt(splitted[3]);
         String value = splitted[4];
-        int clientnodeId = Integer.parseInt(splitted[0].substring(1));
-        int storagenodeId = Integer.parseInt(splitted[1]);
+        int clientNodeId = Integer.parseInt(splitted[0].substring(1));
+        int storageNodeId = Integer.parseInt(splitted[1]);
 
-        UpdateRequestMsg m = new UpdateRequestMsg(key, value, storageNodes.get(storagenodeId));
-        if (clientNodes.containsKey(clientnodeId)){
-          clientNodes.get(clientnodeId).tell(m, ActorRef.noSender());
+        UpdateRequestMsg m = new UpdateRequestMsg(key, value, storageNodes.get(storageNodeId));
+        if (clientNodes.containsKey(clientNodeId)){
+          clientNodes.get(clientNodeId).tell(m, ActorRef.noSender());
         }else{
-          log("C" + clientnodeId + " doesn't exists in the set of client nodes");
+          log("C" + clientNodeId + " doesn't exists in the set of client nodes");
         }
 
       }else if(command.equals("C")){
