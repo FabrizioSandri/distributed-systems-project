@@ -67,6 +67,10 @@ public class StorageNode extends AbstractActor {
   // request given the request id  
   private Map<Integer, String> toWrite;
 
+  // since the recovery operation uses a lot of join functions there is the
+  // need to distringuish between a join and a recovery of the node
+  private boolean recoveryMode;
+
   /*------------------------------------------------------------------------- */
   /*-- StorageNode constructors --------------------------------------------- */
   /*------------------------------------------------------------------------- */
@@ -74,6 +78,7 @@ public class StorageNode extends AbstractActor {
   public StorageNode() {
     this.requestId = 0;
     this.joined = false;
+    this.recoveryMode=false;
 
     requestSender = new HashMap<>();
     storageNodes = new HashMap<>();
@@ -177,7 +182,7 @@ public class StorageNode extends AbstractActor {
       this.responsibleFor = Collections.unmodifiableMap(new HashMap<Integer, Item>(responsibleFor)); 
     }
   }
-  
+
 
   /*------------------------------------------------------------------------- */
   /*-- Message classes - Replication ---------------------------------------- */
@@ -253,7 +258,22 @@ public class StorageNode extends AbstractActor {
       this.requester = requester;   
       this.key = key;
     }
-  }    
+  }  
+
+
+  /*------------------------------------------------------------------------- */
+  /*-- Message classes - Crashing ------------------------------------------- */
+  /*------------------------------------------------------------------------- */
+
+  public static class CrashMsg implements Serializable { }
+
+  public static class RecoveryMsg implements Serializable {
+    ActorRef bootstrapingRecoveryPeer;
+
+    public RecoveryMsg(ActorRef bootstrapingRecoveryPeer) {
+      this.bootstrapingRecoveryPeer = bootstrapingRecoveryPeer;
+    }
+  }
 
   /*------------------------------------------------------------------------- */
   /*-- Message handlers - Item repartitioning ------------------------------- */
@@ -296,10 +316,8 @@ public class StorageNode extends AbstractActor {
     // that the network is in its starting stage, with initial nodes joining. In
     // this phase, nodes don't ask about the data they're responsible for, since
     // it's not possible for a node to find write quorum during this time.
-    if (this.storageNodes.size() < R){
-      
+    if (this.storageNodes.size() < R && !this.recoveryMode){
       announceJoin();
-
     }else {
       // Request data items it is responsible for from its clockwise neighbor
       int clockwiseNeighbor = findClockWiseNeighbor(this.nodeId);
@@ -337,9 +355,13 @@ public class StorageNode extends AbstractActor {
 
     // No message to retrieve from the other nodes
     if (msg.necessaryItems.isEmpty()){
-      announceJoin();
+      if (!this.recoveryMode){
+        announceJoin();
+      }else{
+        this.recoveryMode = false;
+        log("just recovered");
+      }
     }
-   
   }
 
   private void onUpToDateItemRequest(UpToDateItemRequest msg) {
@@ -362,7 +384,7 @@ public class StorageNode extends AbstractActor {
 
     // The node has already joined thus ignore all the join messages that are
     // still flying on the links
-    if (this.joined){
+    if (this.joined && !this.recoveryMode){
       return;
     }
 
@@ -410,8 +432,12 @@ public class StorageNode extends AbstractActor {
         // save the most recent item in the storage of the new storage node
         storage.put(necessaryItemKey, mostRecentItem);
       }
-
-      announceJoin(); // announce to the whole storage network
+      if (!this.recoveryMode){
+        announceJoin(); // announce to the whole storage network
+      }else{
+        this.recoveryMode = false;
+        log("just recovered");
+      }
 
     }
 
@@ -725,6 +751,19 @@ public class StorageNode extends AbstractActor {
     }
   }
 
+  private void onCrashMsg(CrashMsg msg){
+    // change message handler in order to listen only for recovery message
+    getContext().become(crashed());
+    log("crashed");
+  }
+
+  private void onRecoveryMsg(RecoveryMsg msg){
+    // reset the message handler to process ordinary message
+    getContext().become(createReceive());
+    this.recoveryMode = true;
+    msg.bootstrapingRecoveryPeer.tell(new GetSetOfNodesMsg(), getSelf());
+  }
+
   /*-- Auxiliary functions -------------------------------------------------- */
 
   // Find the N nodes that has to be contacted for a given key
@@ -832,7 +871,16 @@ public class StorageNode extends AbstractActor {
         .match(UpdateResponseMsg.class, this::onUpdateResponse)
         .match(TimeoutMsg.class, this::onTimeout)
         .match(RealeaseLockMsg.class, this::onReleaseLock)
+        .match(CrashMsg.class,this::onCrashMsg)
         .build();
   }
+
+  //handler during the crash state of the node
+  final AbstractActor.Receive crashed() {
+    return receiveBuilder()
+        .match(RecoveryMsg.class, this::onRecoveryMsg)
+        .matchAny(msg -> {})
+        .build();
+  } 
 
 }
