@@ -168,6 +168,8 @@ public class Main {
         StorageNode.delay(Integer.parseInt(splitted[1]));
       }else if (command.equals("q")){ // quit the application
         log("Exiting");
+      }else if(command.equals("")){
+        return;
       }else {
         log("Command not recognized as a valid one.");
       }

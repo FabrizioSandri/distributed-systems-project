@@ -250,11 +250,11 @@ public class StorageNode extends AbstractActor {
     }
   }
 
-  public static class RealeaseLockMsg implements Serializable {
+  public static class ReleaseLockMsg implements Serializable {
     public final ActorRef requester;
     public final int key;
 
-    public RealeaseLockMsg(ActorRef requester, int key) {
+    public ReleaseLockMsg(ActorRef requester, int key) {
       this.requester = requester;   
       this.key = key;
     }
@@ -606,8 +606,6 @@ public class StorageNode extends AbstractActor {
         storageNodes.get(storageNodeId).tell(updateResponse, getSelf());
       }
     }
-    // TODO: for efficiency reasons in this part it's possible to check if
-    // quorum.get(requestId).size() == N and then remove the key from quorum
   }
 
 
@@ -662,8 +660,7 @@ public class StorageNode extends AbstractActor {
       GetResponseMsg getResponse = new GetResponseMsg(mostRecentItem);
       requestSender.get(requestId).tell(getResponse, getSelf());
     }
-    // TODO: for efficiency reasons in this part it's possible to check if
-    // quorum.get(requestId).size() == N and then remove the key from quorum
+    
   }
 
   private void onGetRequest(GetRequestMsg msg) {
@@ -737,14 +734,14 @@ public class StorageNode extends AbstractActor {
       requestSender.get(msg.requestId).tell(error, getSender());
       
       //send the message to all the node that have been contacted to release the locks enabled during the write request 
-      RealeaseLockMsg releaseLockMsg = new RealeaseLockMsg(requestSender.get(msg.requestId), msg.key);
+      ReleaseLockMsg releaseLockMsg = new ReleaseLockMsg(requestSender.get(msg.requestId), msg.key);
       for (int storageNodeId : nodesToBeContacted){
         storageNodes.get(storageNodeId).tell(releaseLockMsg, getSelf());
       }
     }
   }
 
-  private void onReleaseLock(RealeaseLockMsg msg){
+  private void onReleaseLock(ReleaseLockMsg msg){
     // permit to unlock the items only to the coordinator that started an update that timed out 
     // the lock request was tracked using the client node reference since an actor can 
     // make a request at the time 
@@ -886,7 +883,7 @@ public class StorageNode extends AbstractActor {
         .match(WriteResponseMsg.class, this::onWriteResponse)
         .match(UpdateResponseMsg.class, this::onUpdateResponse)
         .match(TimeoutMsg.class, this::onTimeout)
-        .match(RealeaseLockMsg.class, this::onReleaseLock)
+        .match(ReleaseLockMsg.class, this::onReleaseLock)
         .match(CrashMsg.class,this::onCrashMsg)
         .build();
   }
