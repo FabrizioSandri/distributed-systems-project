@@ -6,9 +6,15 @@ public class Item {
   public int version;
   public boolean lock; 
 
-  Item(String value, int version, boolean lock){
+  public Item(String value, int version, boolean lock){
     this.value = value;
     this.version = version;
     this.lock = lock;
+  }
+
+  public Item(Item copy){
+    this.value = copy.value;
+    this.version = copy.version;
+    this.lock = copy.lock;
   }
 }

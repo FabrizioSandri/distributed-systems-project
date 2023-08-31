@@ -164,6 +164,21 @@ public class StorageNode extends AbstractActor {
     }
   }
 
+  public static class LeaveMsg implements Serializable { }
+
+  // Announces that node with id nodeId is leaving. The responsibleFor map
+  // contains the items the receiver node becomes responsible for
+  public static class AnnounceLeaveMsg implements Serializable {
+    public final int nodeId;
+    public final Map<Integer,Item> responsibleFor;
+
+    public AnnounceLeaveMsg(int nodeId, Map<Integer, Item> responsibleFor){
+      this.nodeId = nodeId;
+      this.responsibleFor = Collections.unmodifiableMap(new HashMap<Integer, Item>(responsibleFor)); 
+    }
+  }
+  
+
   /*------------------------------------------------------------------------- */
   /*-- Message classes - Replication ---------------------------------------- */
   /*------------------------------------------------------------------------- */
@@ -425,6 +440,67 @@ public class StorageNode extends AbstractActor {
 
   }
   
+  // Handle the command to Leave the network sent from the Main
+  private void onLeaveMsg(LeaveMsg msg) {
+    
+    int leavingNodeId = this.nodeId;
+
+    // Remove this node from the storage net so that storageNodes contains the
+    // updated view of the system after the removal of the node. In this way we
+    // can use findNodesForKey to find the new nodes that becomes responsible
+    // for a key.
+    storageNodes.remove(this.nodeId);
+
+    // iterate over all the nodes in the storage network(remember without
+    // myself) and send to each of them the AnnounceLeaveMsg message containing
+    // the list of items the receiver node becomes responsible for.
+    for (int nodeId : storageNodes.keySet()){
+
+      Map<Integer,Item> responsibleFor =  new HashMap<>();
+
+      for (int key : storage.keySet()){
+        List<Integer> nodesForKey = findNodesForKey(key);
+
+        // check if nodeId is the node with the highest nodeId in the nodes that
+        // are responsible for my(the node leaving) item. In this case it means
+        // that the node with the highest id must receive the item because the
+        // current node just left
+        if (nodesForKey.size()>0 && nodesForKey.get(nodesForKey.size()-1) == nodeId){
+          responsibleFor.put(key, new Item(storage.get(key)));
+        }
+
+      }
+
+      // announce leave to the node along with the Items it is responsible for
+      AnnounceLeaveMsg leaveMsg = new AnnounceLeaveMsg(leavingNodeId, responsibleFor);
+      storageNodes.get(nodeId).tell(leaveMsg, getSender());
+
+    }
+
+    log("left the storage network");
+
+  }
+
+  // Handle the announcement of a node leaving the network
+  private void onAnnounceLeaveMsg(AnnounceLeaveMsg msg) {
+    
+    log("Storage node " + msg.nodeId + " left the network"); 
+
+    // if there are some items I should become responsible for then store these
+    // items
+    if (!msg.responsibleFor.isEmpty()){
+      for (int key : msg.responsibleFor.keySet()) {
+        log("I became responsible for key: " + key);
+        storage.put(key, new Item(msg.responsibleFor.get(key)));  // store the item
+      }
+    }
+
+    // remove the node from the storage network
+    storageNodes.remove(msg.nodeId);
+
+  }
+
+
   /*------------------------------------------------------------------------- */
   /*-- Message handlers - Replication --------------------------------------- */
   /*------------------------------------------------------------------------- */
@@ -730,7 +806,9 @@ public class StorageNode extends AbstractActor {
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-        // Item repartitioning messages
+        /* -- Item repartitioning messages ---------------------------------- */ 
+        
+        // Join
         .match(JoinMsg.class, this::onJoinMsg)
         .match(GetSetOfNodesMsg.class, this::onGetSetOfNodesMsg)
         .match(SetOfNodesMsg.class, this::onSetOfNodesMsg)
@@ -739,8 +817,12 @@ public class StorageNode extends AbstractActor {
         .match(UpToDateItemRequest.class, this::onUpToDateItemRequest)
         .match(UpToDateItemResponse.class, this::onUpToDateItemResponse)
         .match(AnnounceJoinMsg.class, this::onAnnounceJoinMsg)
+        
+        // Leave
+        .match(LeaveMsg.class, this::onLeaveMsg)
+        .match(AnnounceLeaveMsg.class, this::onAnnounceLeaveMsg)
 
-        // Replication messages
+        /* -- Replication messages ------------------------------------------ */ 
         .match(ReadRequest.class, this::onReadRequest)
         .match(UpdateRequestMsg.class, this::onUpdateRequest)
         .match(GetRequestMsg.class, this::onGetRequest)
