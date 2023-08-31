@@ -12,6 +12,9 @@ import it.unitn.ds1.StorageNode.RecoveryMsg;
 
 import java.util.Map;
 import java.util.Scanner;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.HashMap;
 
 public class Main {
@@ -35,6 +38,18 @@ public class Main {
     Map<Integer, ActorRef> storageNodes = new HashMap<Integer, ActorRef>();
 
 
+    // First parse the file commands.txt containing the list of commands to
+    // execute
+    try (BufferedReader br = new BufferedReader(new FileReader("commands.txt"))) {
+      String command;
+      while ((command = br.readLine()) != null) {
+        parseCommand(command, system, storageNodes, clientNodes); // For example, you can print the line
+      }
+    } catch (IOException e) {
+      log("The 'commands.txt' doesn't exists. Proceeding to execute the command line version of the program.");
+    }
+
+
     // commands handler main loop
     Scanner console = new Scanner(System.in);
     System.out.println("===============================");
@@ -46,17 +61,36 @@ public class Main {
     while(!command.equals("q")){
       System.out.print("> ");
       command = console.nextLine();
+
+      parseCommand(command, system, storageNodes, clientNodes);
+    }
+    
+    console.close();
+
+    // system shutdown
+    system.terminate();
+  }
+
+  
+  public static void parseCommand(String command, final ActorSystem system, Map<Integer, ActorRef> storageNodes, Map<Integer, ActorRef> clientNodes) {
       String[] splitted = command.split(" ");
 
       if (splitted[0].equals("J")) {  // join of a new storage node
+        
+        if (splitted.length == 2 && storageNodes.size() > 1){
+          log("You must supply the bootstrapping peer.");
+          return;
+        }
 
         int newNodeId = Integer.parseInt(splitted[1]);
         
         if (storageNodes.containsKey(newNodeId)){
           log("A storage node with the same id already exists.");
-          continue;
+          return;
         }
         storageNodes.put(newNodeId, system.actorOf(StorageNode.props(), "s"+newNodeId));
+
+        
 
         JoinMsg storageJoin;
         if (splitted.length == 2){  // first node to join
@@ -68,7 +102,7 @@ public class Main {
             storageJoin = new JoinMsg(newNodeId, storageNodes.get(bootstrappingPeerId), false);
             storageNodes.get(newNodeId).tell(storageJoin, ActorRef.noSender());
           }else {
-            log("The specified storage node doesn't exists.");
+            log("The bootstrapping peer that you sepcified doesn't exists.");
           }
         }
 
@@ -78,7 +112,7 @@ public class Main {
         
         if (!storageNodes.containsKey(leavingNodeId)){
           log("Storage node with id " + leavingNodeId + " doesn't exists.");
-          continue;
+          return;
         }
         
         LeaveMsg leaveMsg = new LeaveMsg();
@@ -112,50 +146,38 @@ public class Main {
           log("C" + clientnodeId + " doesn't exists in the set of client nodes");
         }
 
-      }
-      else if(command.equals("C")){
+      }else if(command.equals("C")){
         int nodeId = Integer.parseInt(splitted[1]);
         if (!storageNodes.containsKey(nodeId)){
           log("The storage node with that id does not exists.");
-          continue;
+          return;
         }
 
         storageNodes.get(nodeId).tell(new CrashMsg(), ActorRef.noSender()); 
-      }
-      else if(command.equals("R")){
+      }else if(command.equals("R")){
 
         int nodeId = Integer.parseInt(splitted[1]);
         int bootstrapingRecoveryPeerId = Integer.parseInt(splitted[2]);
         if (!storageNodes.containsKey(nodeId) || !storageNodes.containsKey(bootstrapingRecoveryPeerId)){
           log("One or both specified node id don't exists.");
-          continue;
+          return;
         }
 
         storageNodes.get(nodeId).tell(new RecoveryMsg(storageNodes.get(bootstrapingRecoveryPeerId)), ActorRef.noSender()); 
-      }
-      else if (command.equals("q")){ // quit the application
+      }else  if (splitted[0].equals("D")) {
+        StorageNode.delay(Integer.parseInt(splitted[1]));
+      }else if (command.equals("q")){ // quit the application
         log("Exiting");
       }else {
         log("Command not recognized as a valid one.");
       }
 
-      try {
-        Thread.sleep(1000);
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
 
-    }
-    
-    console.close();
-
-    // system shutdown
-    system.terminate();
   }
 
-    // log a given message while also printing MAIN
-    static void log(String message){
-      System.out.println("[MAIN] " + message);
-    }
+  // log a given message while also printing MAIN
+  static void log(String message){
+    System.out.println("[MAIN] " + message);
+  }
 
 }

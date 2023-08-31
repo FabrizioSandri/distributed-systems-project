@@ -548,7 +548,13 @@ public class StorageNode extends AbstractActor {
       WriteResponseMsg res = new WriteResponseMsg(version, msg.key, msg.requestId);
       getSender().tell(res, getSelf());
     
-    }else if(!lockedBy.containsKey(msg.key)){ // check if a creation of the item is taking place, if not create then the item
+    }else if(!lockedBy.containsKey(msg.key)){ 
+      // This check is essential to guarantee that when dealing with an item
+      // having a key that doesn't exist in the storage (a new key), no other
+      // storage node has initiated the process of generating an item with the
+      // identical key. If there are no other nodes creating the item, proceed to
+      // secure the lock using the 'lockedBy' mechanism.
+
 
       // save the client that locked the item, signaling that there is already
       // someone that is working on the item
@@ -711,10 +717,11 @@ public class StorageNode extends AbstractActor {
   }
 
   private void onUpdateResponse(UpdateResponseMsg msg){
-    storage.put(msg.key, new Item(msg.item.value, msg.item.version, msg.item.lock));
+    //save the new item in the storage
+    storage.put(msg.key, new Item(msg.item.value, msg.item.version, false));
     
     // unlock the item to state that the creation happened or 
-    //the updating from a client finished (setted in onWriteRequest to avoid w-w conflint during creation or ordinary update)
+    // the updating from a client finished (setted in onWriteRequest to avoid w-w conflint during creation or ordinary update)
     lockedBy.remove(msg.key);
     log("The item with key " + msg.key + " has been updated to '" + msg.item.value + "' (v" + msg.item.version + ")");
   }
@@ -725,8 +732,8 @@ public class StorageNode extends AbstractActor {
 
     // send an error message to the client that originated the request. Check
     // again that the quorum in the meanwhile has not been reached
-    if (quorum.get(msg.requestId).size() < msg.minQuorumSize){  
-      ErrorMsg error = new ErrorMsg("The request with id " + requestId + " timed out.");
+    if (!quorum.containsKey(msg.requestId) || quorum.get(msg.requestId).size() < msg.minQuorumSize){  
+      ErrorMsg error = new ErrorMsg("The request with id " + msg.requestId + " timed out.");
       requestSender.get(msg.requestId).tell(error, getSender());
       
       //send the message to all the node that have been contacted to release the locks enabled during the write request 
@@ -839,6 +846,15 @@ public class StorageNode extends AbstractActor {
   // log a given message while also printing the storage node id
   void log(String message){
     System.out.println("[S" + this.nodeId + "] " + message);
+  }
+
+  // delay the execution for the given amount of milliseconds
+  public static void delay(int milliseconds) {
+    try {
+      Thread.sleep(milliseconds);
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
   }
 
   // Mapping between the received message types and this actor methods
