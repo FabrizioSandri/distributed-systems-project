@@ -268,10 +268,10 @@ public class StorageNode extends AbstractActor {
   public static class CrashMsg implements Serializable { }
 
   public static class RecoveryMsg implements Serializable {
-    ActorRef bootstrapingRecoveryPeer;
+    ActorRef bootstrappingRecoveryPeer;
 
-    public RecoveryMsg(ActorRef bootstrapingRecoveryPeer) {
-      this.bootstrapingRecoveryPeer = bootstrapingRecoveryPeer;
+    public RecoveryMsg(ActorRef bootstrappingRecoveryPeer) {
+      this.bootstrappingRecoveryPeer = bootstrappingRecoveryPeer;
     }
   }
 
@@ -718,7 +718,7 @@ public class StorageNode extends AbstractActor {
     storage.put(msg.key, new Item(msg.item.value, msg.item.version, false));
     
     // unlock the item to state that the creation happened or 
-    // the updating from a client finished (setted in onWriteRequest to avoid w-w conflint during creation or ordinary update)
+    // the updating from a client finished (set in onWriteRequest to avoid w-w conflicts during creation or ordinary update)
     lockedBy.remove(msg.key);
     log("The item with key " + msg.key + " has been updated to '" + msg.item.value + "' (v" + msg.item.version + ")");
   }
@@ -765,7 +765,7 @@ public class StorageNode extends AbstractActor {
     // reset the message handler to process ordinary message
     getContext().become(createReceive());
     this.recoveryMode = true;
-    msg.bootstrapingRecoveryPeer.tell(new GetSetOfNodesMsg(), getSelf());
+    msg.bootstrappingRecoveryPeer.tell(new GetSetOfNodesMsg(), getSelf());
   }
 
   /*-- Auxiliary functions -------------------------------------------------- */

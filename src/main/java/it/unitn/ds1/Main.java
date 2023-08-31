@@ -157,13 +157,13 @@ public class Main {
       }else if(command.equals("R")){
 
         int nodeId = Integer.parseInt(splitted[1]);
-        int bootstrapingRecoveryPeerId = Integer.parseInt(splitted[2]);
-        if (!storageNodes.containsKey(nodeId) || !storageNodes.containsKey(bootstrapingRecoveryPeerId)){
+        int bootstrappingRecoveryPeerId = Integer.parseInt(splitted[2]);
+        if (!storageNodes.containsKey(nodeId) || !storageNodes.containsKey(bootstrappingRecoveryPeerId)){
           log("One or both specified node id don't exists.");
           return;
         }
 
-        storageNodes.get(nodeId).tell(new RecoveryMsg(storageNodes.get(bootstrapingRecoveryPeerId)), ActorRef.noSender()); 
+        storageNodes.get(nodeId).tell(new RecoveryMsg(storageNodes.get(bootstrappingRecoveryPeerId)), ActorRef.noSender()); 
       }else  if (splitted[0].equals("D")) {
         StorageNode.delay(Integer.parseInt(splitted[1]));
       }else if (command.equals("q")){ // quit the application
