@@ -68,7 +68,7 @@ public class StorageNode extends AbstractActor {
   private Map<Integer, String> toWrite;
 
   // since the recovery operation uses a lot of join functions there is the
-  // need to distringuish between a join and a recovery of the node
+  // need to distinguish between a join and a recovery of the node
   private boolean recoveryMode;
 
   /*------------------------------------------------------------------------- */
