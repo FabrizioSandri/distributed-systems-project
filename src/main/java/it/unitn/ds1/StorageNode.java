@@ -71,6 +71,9 @@ public class StorageNode extends AbstractActor {
   // need to distinguish between a join and a recovery of the node
   private boolean recoveryMode;
 
+  // Used to recognize the type of the request
+  private enum RequestType { GET, UPDATE }
+
   /*------------------------------------------------------------------------- */
   /*-- StorageNode constructors --------------------------------------------- */
   /*------------------------------------------------------------------------- */
@@ -240,12 +243,12 @@ public class StorageNode extends AbstractActor {
   // Used to specify that a given request id has timed out
   public static class TimeoutMsg implements Serializable {
     public final int requestId;
-    public final int minQuorumSize;
+    public final RequestType reqType;
     public final int key;
 
-    public TimeoutMsg(int requestId, int minQuorumSize, int key) {
+    public TimeoutMsg(int requestId, RequestType reqType, int key) {
       this.requestId = requestId;      
-      this.minQuorumSize = minQuorumSize;     
+      this.reqType = reqType;     
       this.key = key;
     }
   }
@@ -282,7 +285,6 @@ public class StorageNode extends AbstractActor {
   private void onJoinMsg(JoinMsg msg) {
 
     this.nodeId = msg.nodeId;     // save the current node id
-    log("Joining the storage network");
     
     // Add myself to the current set of storage nodes
     this.storageNodes.put(this.nodeId, getSelf());
@@ -657,7 +659,7 @@ public class StorageNode extends AbstractActor {
       }
 
       // send back the response
-      GetResponseMsg getResponse = new GetResponseMsg(mostRecentItem);
+      GetResponseMsg getResponse = new GetResponseMsg(msg.key, mostRecentItem);
       requestSender.get(requestId).tell(getResponse, getSelf());
     }
     
@@ -669,7 +671,7 @@ public class StorageNode extends AbstractActor {
     getContext().system().scheduler().scheduleOnce(
       Duration.create(T * 1000, TimeUnit.MILLISECONDS),     // how frequently generate them
       getSelf(),                                            // destination actor reference
-      new TimeoutMsg(this.requestId, R, msg.key),           // the message to send
+      new TimeoutMsg(this.requestId, RequestType.GET, msg.key),           // the message to send
       getContext().system().dispatcher(),                   // system dispatcher
       getSelf()                                             // source of the message (myself)
     );
@@ -692,7 +694,7 @@ public class StorageNode extends AbstractActor {
     getContext().system().scheduler().scheduleOnce(
       Duration.create(T * 1000, TimeUnit.MILLISECONDS),     // how frequently generate them
       getSelf(),                                            // destination actor reference
-      new TimeoutMsg(this.requestId, W, msg.key),           // the message to send
+      new TimeoutMsg(this.requestId, RequestType.UPDATE, msg.key),           // the message to send
       getContext().system().dispatcher(),                   // system dispatcher
       getSelf()                                             // source of the message (myself)
     );
@@ -729,8 +731,14 @@ public class StorageNode extends AbstractActor {
 
     // send an error message to the client that originated the request. Check
     // again that the quorum in the meanwhile has not been reached
-    if (!quorum.containsKey(msg.requestId) || quorum.get(msg.requestId).size() < msg.minQuorumSize){  
-      ErrorMsg error = new ErrorMsg("The request with id " + msg.requestId + " timed out.");
+    int minQuorumSize = (msg.reqType == RequestType.GET) ? R : W;
+    if (!quorum.containsKey(msg.requestId) || quorum.get(msg.requestId).size() < minQuorumSize){  
+      ErrorMsg error;
+      if (msg.reqType == RequestType.GET){
+        error = new ErrorMsg("get(" + msg.key + ") TIMED OUT");
+      }else{
+        error = new ErrorMsg("update(" + msg.key + ", ..) TIMED OUT");
+      }
       requestSender.get(msg.requestId).tell(error, getSender());
       
       //send the message to all the node that have been contacted to release the locks enabled during the write request 

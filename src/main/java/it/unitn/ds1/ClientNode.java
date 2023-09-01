@@ -56,9 +56,11 @@ public class ClientNode extends AbstractActor {
   }
 
   public static class GetResponseMsg implements Serializable {
+    public final int key;
     public final Item item;
 
-    public GetResponseMsg(Item item) {
+    public GetResponseMsg(int key, Item item) {
+      this.key = key;
       this.item = item;
     }
   }
@@ -87,11 +89,11 @@ public class ClientNode extends AbstractActor {
   }
 
   private void onGetResponse(GetResponseMsg msg) {
-    log("Get response: '" + msg.item.value + "' (v" + msg.item.version + ")");
+    log("get(" + msg.key + "): " + msg.item.value + " (v" + msg.item.version + ")");
   }
 
   private void onUpdateResponse(UpdateResponseMsg msg) {
-    log("Update response: '" + msg.item.value + "' (v" + msg.item.version + ")");
+    log("update(" + msg.key + ", " + msg.item.value + "): " + msg.item.value + " (v" + msg.item.version + ")");
   }
 
   // Handle error messages
