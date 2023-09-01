@@ -146,7 +146,7 @@ public class Main {
           log("C" + clientNodeId + " doesn't exists in the set of client nodes");
         }
 
-      }else if(command.equals("C")){
+      }else if(splitted[0].equals("C") && splitted.length == 2){
         int nodeId = Integer.parseInt(splitted[1]);
         if (!storageNodes.containsKey(nodeId)){
           log("The storage node with that id does not exists.");
@@ -154,7 +154,7 @@ public class Main {
         }
 
         storageNodes.get(nodeId).tell(new CrashMsg(), ActorRef.noSender()); 
-      }else if(command.equals("R")){
+      }else if(splitted[0].equals("R") && splitted.length == 3){
 
         int nodeId = Integer.parseInt(splitted[1]);
         int bootstrappingRecoveryPeerId = Integer.parseInt(splitted[2]);
