@@ -407,7 +407,7 @@ public class StorageNode extends AbstractActor {
     // system
     boolean receivedAllNecessary = true;
     for (int necessaryItemKey : this.necessaryItems){
-      if (quorum.get(necessaryItemKey).size() < R){
+      if (!quorum.containsKey(necessaryItemKey) || quorum.get(necessaryItemKey).size() < R){
         receivedAllNecessary = false;
         break;
       }
