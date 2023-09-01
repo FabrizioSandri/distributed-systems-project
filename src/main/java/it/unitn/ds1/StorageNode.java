@@ -615,8 +615,9 @@ public class StorageNode extends AbstractActor {
     int version = 0;
     String value = "";
       
-    // Check if the storage contains the requested item
-    if (storage.containsKey(msg.key) && !storage.get(msg.key).lock) { // check if the system is updating the item
+    // Check if the storage contains the requested item and that the item is not
+    // already locked by someone else
+    if (storage.containsKey(msg.key) && !storage.get(msg.key).lock) { 
       version = storage.get(msg.key).version;
       value = storage.get(msg.key).value;
 
