@@ -813,7 +813,7 @@ public class StorageNode extends AbstractActor {
     Collections.sort(keySet);
 
     for(int i=0; i<storageNodes.size(); i++){ 
-      if (keySet.get(i) >= nodeId){
+      if (keySet.get(i) > nodeId){
         neighborId = keySet.get(i);
         break;
       }
