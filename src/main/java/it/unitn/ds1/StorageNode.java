@@ -894,6 +894,7 @@ public class StorageNode extends AbstractActor {
         .match(TimeoutMsg.class, this::onTimeoutMsg)
         .match(ReleaseLockMsg.class, this::onReleaseLockMsg)
         .match(CrashMsg.class,this::onCrashMsg)
+        .matchAny(msg -> {})
         .build();
   }
 
