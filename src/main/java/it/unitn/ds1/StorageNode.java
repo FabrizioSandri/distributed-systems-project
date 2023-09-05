@@ -538,6 +538,7 @@ public class StorageNode extends AbstractActor {
     
     // Check if the item is already locked by someone else
     if (storage.containsKey(msg.key) && !storage.get(msg.key).lock){ 
+      delay(100);
       storage.get(msg.key).lock = true; 
       
       // Save the client that locked the item, also signaling that there is
@@ -548,6 +549,7 @@ public class StorageNode extends AbstractActor {
 
       // Send the item as a response to the request
       WriteResponseMsg res = new WriteResponseMsg(version, msg.key, msg.requestId);
+      delay(100);
       getSender().tell(res, getSelf());
     
     }else if(!lockedBy.containsKey(msg.key)){ 
@@ -560,10 +562,12 @@ public class StorageNode extends AbstractActor {
 
       // save the client that locked the item, signaling that there is already
       // someone that is working on the item
+      delay(100);
       lockedBy.put(msg.key, msg.clientNode); 
     
       // Send the item as a response to the request
       WriteResponseMsg res = new WriteResponseMsg(version, msg.key, msg.requestId);
+      delay(100);
       getSender().tell(res, getSelf());
     }
   }
@@ -623,6 +627,7 @@ public class StorageNode extends AbstractActor {
 
       // Send the item as a response to the request
       ReadResponseMsg res = new ReadResponseMsg(msg.key, value, version, msg.requestId);
+      delay(100);
       getSender().tell(res, getSelf());
     
     }
@@ -644,7 +649,7 @@ public class StorageNode extends AbstractActor {
     // originated that request id. If size > R then discard the responses
     // because the response has already been sent
     if (quorum.get(requestId).size() == R && fulfilled.containsKey(requestId) == false){
-      
+      delay(100);
       // The request has been fulfilled and thus 
       fulfilled.put(requestId, true); 
       
@@ -719,7 +724,7 @@ public class StorageNode extends AbstractActor {
   private void onUpdateResponseMsg(UpdateResponseMsg msg){
     //save the new item in the storage
     storage.put(msg.key, new Item(msg.item.value, msg.item.version, false));
-    
+    delay(100);
     // unlock the item to state that the creation happened or 
     // the updating from a client finished (set in onWriteRequestMsg to avoid w-w conflicts during creation or ordinary update)
     lockedBy.remove(msg.key);
@@ -755,6 +760,7 @@ public class StorageNode extends AbstractActor {
     // the lock request was tracked using the client node reference since an actor can 
     // make a request at the time 
     if (lockedBy.containsKey(msg.key) && lockedBy.get(msg.key) == msg.requester){ 
+      delay(100);
       lockedBy.remove(msg.key);
 
       //need to unlock the item lock if the node manage to get the lock on it even if the request timed out 
