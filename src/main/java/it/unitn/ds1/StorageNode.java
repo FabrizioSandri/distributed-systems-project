@@ -58,10 +58,10 @@ public class StorageNode extends AbstractActor {
   // actor not responsible for the lock from unlocking it.
   private Map<Integer, ActorRef> lockedBy;
 
-  // The items obtained from read requests for each request ID are stored in
-  // this variable. This serves the purpose of both obtaining the most recent
-  // version among the received items for a specific requestId and also for
-  // determining if the quorum criteria are met for that requestId.
+  // The items obtained from requests for each request ID are stored in this
+  // variable. This serves the purpose of both obtaining the most recent version
+  // among the received items for a specific requestId and also for determining
+  // if the quorum criteria are met for that requestId.
   private Map<Integer, List<Item>> quorum;
 
   // Used by the coordinator to retrieve the value to be written in a write
