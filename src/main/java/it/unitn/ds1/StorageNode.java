@@ -45,7 +45,7 @@ public class StorageNode extends AbstractActor {
   // receives once it has finished the joining process.
   boolean joined; 
 
-  // This variable holds thr count of incoming client requests. It serves the
+  // This variable holds the count of incoming client requests. It serves the
   // purpose of distinguishing between different requests. Whenever a client
   // communicates with this storage node for a 'get' or 'update' request, the
   // requestId value is incremented.
