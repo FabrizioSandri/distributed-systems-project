@@ -53,7 +53,7 @@ public class Main {
     // commands handler main loop
     Scanner console = new Scanner(System.in);
     System.out.println("===============================");
-    System.out.println("Syntax for the commands:\n- 'J 5 10' add a new storage node with id 5 to the storage network using node 10 as bootstrapping peer. If the node is the first one, leave the bootstrapping peer parameter empty\n- 'L 5' tell node 5 to leave the storage network \n- 'C1 10 G 5' C1 select storage node 10 as the coordinator for a get request for the key 5\n- 'C1 10 U 5 hello' C1 select storage node 10 as the coordinator for a update request to the key 5 with the new value 'hello'\n- 'C 2' make the storage node with id 2 crash\n- 'R 2 3' Make the storage node with id 2 recover using the storage node with id 3 as bootstrapping recovery peer\n- 'q' to exit ");
+    System.out.println("Syntax for the commands:\n1. DATA SERVICE:\n  - GET: 'C1 10 G 5' C1 select storage node 10 as the coordinator for a get request for the key 5\n  - UPDATE 'C1 10 U 5 hello' C1 select storage node 10 as the coordinator for a update request to the key 5 with the new value 'hello'\n2. MANAGEMENT SERVICE:\n  - JOIN: 'J 5 10' add a new storage node with id 5 to the storage network using node 10 as bootstrapping peer. If the node is the first one, leave the bootstrapping peer parameter empty\n  - LEAVE: 'L 5' tell node 5 to leave the storage network \n  - CRASH: 'C 2' make the storage node with id 2 crash\n  - RECOVERY: 'R 2 3' Make the storage node with id 2 recover using the storage node with id 3 as bootstrapping recovery peer\n  - 'q' to exit ");
     System.out.println("===============================");
 
     String command = "";
