@@ -322,7 +322,7 @@ public class StorageNode extends AbstractActor {
     // If the count of storage nodes in the network is below R, it indicates
     // that the network is in its starting stage, with initial nodes joining. In
     // this phase, nodes don't ask about the data they're responsible for, since
-    // it's not possible for a node to find write quorum during this time.
+    // it's not possible for a node to find a read quorum during this time.
     if (this.storageNodes.size() < R && !this.recoveryMode){
       announceJoin();
     }else {
