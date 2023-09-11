@@ -395,7 +395,7 @@ public class StorageNode extends AbstractActor {
       return;
     }
 
-    // in this first par we use the msg.key as a way to disambiguate between
+    // in this first part we use the msg.key as a way to disambiguate between
     // requests
     int requestId = msg.key;
 
@@ -768,7 +768,7 @@ public class StorageNode extends AbstractActor {
       delay(rnd.nextInt(100));
       lockedBy.remove(msg.key);
 
-      //need to unlock the item lock if the node manage to get the lock on it even if the request timed out 
+      // Unlock the item if the node managed to get the lock on it 
       if (storage.containsKey(msg.key)){
         storage.get(msg.key).lock = false;
       }
