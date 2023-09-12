@@ -1,7 +1,5 @@
 # Distributed Key-Value Store in Akka
 
-## Overview
-
 Inspired by Amazon Dynamo, this project introduces a DHT-based peer-to-peer
 key-value storage service implemented using Akka actors. It provides a simple
 user interface to upload/request data and issue management commands, emphasizing
@@ -35,7 +33,7 @@ framework](https://akka.io/) and an up-to-date Java version installed.
 With the dependencies in place, populate the `commands.txt` file with the
 desired commands for execution. To run the project, navigate to this directory
 and execute:
-```
+```bash
 gradle run
 ```
 
