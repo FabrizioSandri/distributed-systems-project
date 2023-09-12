@@ -1,5 +1,7 @@
 # Distributed Key-Value Store in Akka
 
+[[Report]](/report.pdf)
+
 Inspired by Amazon Dynamo, this project introduces a DHT-based peer-to-peer
 key-value storage service implemented using Akka actors. It provides a simple
 user interface to upload/request data and issue management commands, emphasizing
